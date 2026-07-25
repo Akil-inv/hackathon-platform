@@ -251,6 +251,7 @@ model Judge {
   userId               String?     @map("user_id") @db.Uuid
   name                 String
   email                String
+  phone                String?
   organisation         String?
   designation          String?
   judgeType            JudgeType   @map("judge_type")
