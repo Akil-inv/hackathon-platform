@@ -21,7 +21,7 @@ export default function JudgePortalPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  const apiUrl = typeof window !== 'undefined' ? window.location.origin.replace(':3000', ':4000') : 'http://localhost:4000';
+  const apiUrl = typeof window !== 'undefined' ? window.location.origin.replace(':3000', ':4000') : '';
 
   const fetchData = async () => {
     if (!token || !eventId) return;

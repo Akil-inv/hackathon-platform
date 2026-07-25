@@ -29,7 +29,7 @@ const getEvDays = (a: string, b: string) => { if (!a || !b) return []; const d: 
 const slDS = (s: string) => s ? new Date(s).toLocaleDateString('en-CA',{timeZone:TZ}) : '';
 
 export default function EventSetupPage() {
-  const { data: evData, refetch: refetchEvents } = useQuery<any>(EVENTS_QUERY);
+  const { data: evData } = useQuery<any>(EVENTS_QUERY);
   const event = evData?.events?.[0];
   const eventId = event?.id;
   const { data: roomData } = useQuery<any>(ROOMS_QUERY, eventId ? { eventId } : undefined);
@@ -87,7 +87,7 @@ export default function EventSetupPage() {
     setImportErrors([]);
     const fd = new FormData(); fd.append('file', file); fd.append('eventId', eventId);
     try {
-      const r = await fetch(`http://localhost:4000/api/import/${ep}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+      const r = await fetch(`/api/import/${ep}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       const d = await r.json();
       if (d.imported !== undefined) {
         show(`${d.imported} ${ep} imported${d.errors?.length ? ` (${d.errors.length} rejected)` : ''}`);
@@ -118,7 +118,7 @@ export default function EventSetupPage() {
   const maxJudges = ef.maxJudgesPerTeam || 5;
   const totalJudgeCapacity = judges.reduce((s: number, j: any) => s + (j.maxSessions || 4), 0);
   const judgeSessionsNeeded = teams.length * minJudges;
-  const sessionDuration = ef.sessionDuration || 20;
+  const sessionDuration = ef.sessionDurationMinutes || 20;
   const slotsPerRoom = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length / Math.max(rooms.length, 1);
   const roomSessionCapacity = rooms.length * slotsPerRoom;
 

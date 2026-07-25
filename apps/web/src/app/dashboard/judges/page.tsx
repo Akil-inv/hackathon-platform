@@ -85,7 +85,7 @@ export default function JudgesPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('eventId', eventId);
-      const res = await fetch('http://localhost:4000/api/import/judges', {
+      const res = await fetch('/api/import/judges', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,

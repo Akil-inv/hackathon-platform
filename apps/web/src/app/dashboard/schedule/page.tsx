@@ -238,7 +238,7 @@ export default function ScheduleBuilderPage() {
     if (!confirm('This will clear all sessions so you can regenerate from scratch.\n\nThis is only available before event day.\n\nAre you sure?')) return;
     setSaving(true);
     try {
-      const res = await fetch(`http://localhost:4000/graphql`, {
+      const res = await fetch(`/graphql`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ query: `mutation { resetSchedule(eventId: "${eventId}") }` }),

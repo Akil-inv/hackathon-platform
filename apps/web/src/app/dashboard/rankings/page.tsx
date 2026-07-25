@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API = process.env.NEXT_PUBLIC_API_URL || '';
 
 const RANKING_FIELDS = `
   eventId trackId trackName status teamsRanked teamsWithIncompleteScores calculatedAt
