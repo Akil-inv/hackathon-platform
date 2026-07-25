@@ -8,6 +8,7 @@ export class JudgeLink {
   @Field() name!: string;
   @Field() email!: string;
   @Field() token!: string;
+  @Field({ nullable: true }) phone?: string;
   @Field() link!: string;
 }
 

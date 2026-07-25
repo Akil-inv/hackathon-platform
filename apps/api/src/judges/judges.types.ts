@@ -27,6 +27,7 @@ export class JudgeEntity {
   @Field() eventId!: string;
   @Field() name!: string;
   @Field() email!: string;
+  @Field({ nullable: true }) phone?: string;
   @Field({ nullable: true }) organisation?: string;
   @Field({ nullable: true }) designation?: string;
   @Field(() => JudgeType) judgeType!: JudgeType;

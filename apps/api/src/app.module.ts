@@ -19,6 +19,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { ScorecardsModule } from './scorecards/scorecards.module';
 import { RankingsModule } from './rankings/rankings.module';
 import { ExportModule } from './export/export.module';
+import { NotificationModule } from './notification/notification.module';
 import { JudgePortalModule } from './judge-portal/judge-portal.module';
 import { OperationsModule } from './operations/operations.module';
 import { HealthResolver } from './health.resolver';
@@ -52,6 +53,7 @@ import { RolesGuard } from './auth/roles.guard';
     ScorecardsModule,
     RankingsModule,
     ExportModule,
+    NotificationModule,
     JudgePortalModule,
     OperationsModule,
   ],

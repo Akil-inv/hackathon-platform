@@ -54,6 +54,6 @@ export class JudgePortalService {
 
   async generateAllLinks(eventId: string) {
     const judges = await this.prisma.judge.findMany({ where: { eventId, deletedAt: null, status: 'ACTIVE' }, orderBy: { name: 'asc' } });
-    return judges.map(j => ({ judgeId: j.id, name: j.name, email: j.email, token: this.generateToken(j.id), link: `/judge/${this.generateToken(j.id)}?event=${eventId}` }));
+    return judges.map(j => ({ judgeId: j.id, name: j.name, email: j.email, phone: j.phone || null, token: this.generateToken(j.id), link: `/judge/${this.generateToken(j.id)}?event=${eventId}` }));
   }
 }

@@ -5,7 +5,7 @@ import { EVENTS_QUERY } from '@/lib/queries';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 
-const JUDGE_LINKS_QUERY = `query JudgeLinks($eventId: String!) { judgeLinks(eventId: $eventId) { judgeId name email token link } }`;
+const JUDGE_LINKS_QUERY = `query JudgeLinks($eventId: String!) { judgeLinks(eventId: $eventId) { judgeId name email phone token link } }`;
 
 type NotifConfig = {
   provider: 'none' | 'ses' | 'sns' | 'both';
@@ -76,9 +76,33 @@ export default function JudgeLinksPage() {
     }
     setSending(link.judgeId);
 
-    // In production on AWS, this would call the backend which uses SNS/SES
-    // For now, simulate sending
-    await new Promise(r => setTimeout(r, 1500));
+    try {
+      const res = await fetch('/api/notify/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          judgeName: link.name,
+          judgeEmail: link.email,
+          judgePhone: link.phone || '',
+          portalLink: baseUrl + link.link,
+          eventName,
+          channel: config.provider === 'both' ? 'both' : config.provider === 'sns' ? 'sns' : 'ses',
+          sesFromEmail: config.sesFromEmail,
+          sesRegion: config.sesRegion,
+          snsRegion: config.snsRegion,
+        }),
+      });
+      const result = await res.json();
+      if (result.email?.success || result.sms?.success) {
+        // success
+      } else {
+        console.error('Send failed:', result);
+        return;
+      }
+    } catch (e: any) {
+      console.error('Send error:', e);
+      return;
+    }
 
     setSentTo(prev => new Set([...prev, link.judgeId]));
     setSending(null);
