@@ -14,6 +14,10 @@ RUN npx nest build
 
 EXPOSE 4000
 
+RUN chown -R node:node /app
 USER node
+RUN chown -R node:node /app
 USER node
-CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"]
+RUN chown -R node:node /app
+USER node
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]

@@ -6,6 +6,8 @@ COPY . .
 EXPOSE 8001
 RUN useradd -r appuser
 RUN useradd -r appuser
+RUN useradd -r appuser
+USER appuser
 USER appuser
 USER appuser
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
