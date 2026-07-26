@@ -30,8 +30,6 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     # Index maps
     team_idx = {t.id: i for i, t in enumerate(teams)}
     slot_idx = {s.id: i for i, s in enumerate(slots)}
-    room_idx = {r.id: i for i, r in enumerate(rooms)}
-    judge_idx = {j.id: i for i, j in enumerate(judges)}
 
     # Judge availability as set of slot indices
     judge_avail = {}

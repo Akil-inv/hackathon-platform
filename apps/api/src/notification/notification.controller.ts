@@ -64,7 +64,7 @@ export class NotificationController {
         PhoneNumber: body.judgePhone,
         Message: message,
         MessageAttributes: {
-          'AWS.SNS.SMS.SenderID': { DataType: 'String', StringValue: 'IGC2026' },
+          
           'AWS.SNS.SMS.SMSType': { DataType: 'String', StringValue: 'Transactional' },
         },
       }));
