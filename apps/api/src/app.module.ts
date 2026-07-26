@@ -20,6 +20,7 @@ import { ScorecardsModule } from './scorecards/scorecards.module';
 import { RankingsModule } from './rankings/rankings.module';
 import { ExportModule } from './export/export.module';
 import { NotificationModule } from './notification/notification.module';
+import { HealthController } from './health.controller';
 import { JudgePortalModule } from './judge-portal/judge-portal.module';
 import { OperationsModule } from './operations/operations.module';
 import { HealthResolver } from './health.resolver';
@@ -27,6 +28,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 
 @Module({
+  controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
