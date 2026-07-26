@@ -10,6 +10,7 @@ datasource db {
 // ─── Auth ──────────────────────────────────────────────
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   COORDINATOR
   PANEL_CHAIR
@@ -18,10 +19,19 @@ enum Role {
   AUDITOR
 }
 
+enum EventRole {
+  ADMIN
+  COORDINATOR
+  PANEL_CHAIR
+  AUDITOR
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
   passwordHash String   @map("password_hash")
+  name         String   @default("")
+  phone        String?
   role         Role
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -30,6 +40,7 @@ model User {
   conflictsDeclaredBy ConflictDeclaration[] @relation("declared_by")
   conflictsResolvedBy ConflictDeclaration[] @relation("resolved_by")
 
+  eventUsers   EventUser[]
   @@map("users")
 }
 
@@ -76,6 +87,7 @@ model Event {
   rankings         RankingResult[]
   sessions         JudgingSession[]
 
+  eventUsers    EventUser[]
   @@map("events")
 }
 
@@ -594,4 +606,17 @@ enum RoundStatus {
   SCORING
   CALCULATING
   COMPLETED
+}
+
+
+model EventUser {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  eventId   String    @map("event_id") @db.Uuid
+  role      EventRole
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id])
+  event     Event     @relation(fields: [eventId], references: [id])
+  @@unique([userId, eventId])
+  @@map("event_users")
 }
