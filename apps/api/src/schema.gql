@@ -268,6 +268,7 @@ type JudgeEntity {
   maxSessions: Int!
   name: String!
   organisation: String
+  phone: String
   status: JudgeStatus!
 }
 
@@ -283,6 +284,7 @@ type JudgeLink {
   judgeId: String!
   link: String!
   name: String!
+  phone: String
   token: String!
 }
 
