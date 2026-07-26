@@ -13,6 +13,8 @@ import { IS_PUBLIC_KEY } from './public.decorator';
  */
 const SUPER_ADMIN = 'SUPER_ADMIN';
 
+type RequestUser = { role?: string } | null;
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -33,9 +35,14 @@ export class RolesGuard implements CanActivate {
     const user = this.getUser(context);
     if (!user) return false;
 
-    if (user.role === SUPER_ADMIN) return true;
+    // Narrow to string before the includes() check — a token without a role
+    // claim is rejected rather than compared.
+    const role = user.role;
+    if (!role) return false;
 
-    return requiredRoles.includes(user.role);
+    if (role === SUPER_ADMIN) return true;
+
+    return requiredRoles.includes(role);
   }
 
   /**
@@ -46,7 +53,7 @@ export class RolesGuard implements CanActivate {
    * `req`. That only stayed hidden because no REST controller carries @Roles()
    * today — adding one would have produced a 500 rather than a 403.
    */
-  private getUser(context: ExecutionContext): { role?: string } | null {
+  private getUser(context: ExecutionContext): RequestUser {
     if (context.getType<'graphql' | 'http'>() === 'graphql') {
       const gqlContext = GqlExecutionContext.create(context).getContext();
       return gqlContext?.req?.user ?? null;
