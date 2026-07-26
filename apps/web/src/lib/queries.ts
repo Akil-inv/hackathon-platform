@@ -127,3 +127,64 @@ export const SUBMIT_SCORECARD_MUTATION = `
     submitScorecard(input: $input) { id status totalScore submittedAt }
   }
 `;
+
+// --- Event context ------------------------------------------------------
+
+// Requires UsersModule registered in app.module.ts.
+// Until then EventSelector falls back to EVENTS_QUERY.
+export const MY_EVENTS_QUERY = `query { myEvents { id name status role } }`;
+
+// --- User management ----------------------------------------------------
+
+export const USERS_QUERY = `query { users { id email name role } }`;
+
+export const CREATE_USER_MUTATION = `
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) { id email name role }
+  }
+`;
+
+export const ASSIGN_EVENT_ROLE_MUTATION = `
+  mutation AssignEventRole($input: AssignEventRoleInput!) {
+    assignEventRole(input: $input)
+  }
+`;
+
+export const REMOVE_EVENT_ROLE_MUTATION = `
+  mutation RemoveEventRole($userId: String!, $eventId: String!) {
+    removeEventRole(userId: $userId, eventId: $eventId)
+  }
+`;
+
+export const DELETE_USER_MUTATION = `
+  mutation DeleteUser($userId: String!) {
+    deleteUser(userId: $userId)
+  }
+`;
+
+export const RESET_USER_PASSWORD_MUTATION = `
+  mutation ResetUserPassword($userId: String!, $newPassword: String!) {
+    resetUserPassword(userId: $userId, newPassword: $newPassword)
+  }
+`;
+
+// --- Dashboard KPIs -----------------------------------------------------
+// Deliberately lean: only the fields the KPI cards read, so the dashboard
+// doesn't pull full session payloads on every poll.
+
+export const DASHBOARD_SESSIONS_QUERY = `
+  query DashboardSessions($eventId: String!) {
+    sessions(eventId: $eventId) {
+      id teamId teamName roomName stage scheduledStart scheduledEnd
+      scorecardsSubmitted scorecardsTotal
+    }
+  }
+`;
+
+export const DASHBOARD_HEALTH_QUERY = `
+  query DashboardHealth($eventId: String!) {
+    sessionHealthCheck(eventId: $eventId) {
+      sessionId teamName roomName stage isHealthy issues judgesAssigned judgesRequired
+    }
+  }
+`;

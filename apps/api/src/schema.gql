@@ -20,6 +20,12 @@ input AddJudgeInput {
   sessionId: String!
 }
 
+input AssignEventRoleInput {
+  eventId: String!
+  role: String!
+  userId: String!
+}
+
 enum AuditAction {
   CREATE
   DELETE
@@ -150,6 +156,14 @@ input CreateTrackInput {
   description: String
   eventId: String!
   name: String!
+}
+
+input CreateUserInput {
+  email: String!
+  globalRole: String
+  name: String!
+  password: String!
+  phone: String
 }
 
 type CriterionAverage {
@@ -333,6 +347,7 @@ type Mutation {
   addCriterion(input: AddCriterionInput!): ScoringCriterionEntity!
   addJudgeToSession(input: AddJudgeInput!): OperationResult!
   approveRankings(eventId: String!, trackId: String): RankingOutput
+  assignEventRole(input: AssignEventRoleInput!): Boolean!
   calculateRankings(eventId: String!, trackId: String): RankingOutput!
   cancelSession(input: CancelSessionInput!): OperationResult!
   changeRoom(input: ChangeRoomInput!): OperationResult!
@@ -343,12 +358,14 @@ type Mutation {
   createScoringTemplate(input: CreateScoringTemplateInput!): ScoringTemplateEntity!
   createTeam(input: CreateTeamInput!): TeamEntity!
   createTrack(input: CreateTrackInput!): TrackEntity!
+  createUser(input: CreateUserInput!): UserEntity!
   declareConflict(input: DeclareConflictInput!): ConflictEntity!
   deleteEvent(id: String!): EventEntity!
   deleteJudge(id: String!): JudgeEntity!
   deleteRoom(id: String!): RoomEntity!
   deleteTeam(id: String!): TeamEntity!
   deleteTrack(id: String!): TrackEntity!
+  deleteUser(userId: String!): Boolean!
   generateSchedule(input: GenerateScheduleInput!): ScheduleResult!
   generateTimeSlots(input: GenerateTimeSlotsInput!): [TimeSlotEntity!]!
   lockScorecard(scorecardId: String!): ScorecardEntity!
@@ -357,11 +374,13 @@ type Mutation {
   publishRankings(eventId: String!, trackId: String): RankingOutput
   register(input: RegisterInput!): UserResponse!
   removeCriterion(id: String!): Boolean!
+  removeEventRole(eventId: String!, userId: String!): Boolean!
   reopenScorecard(reason: String!, scorecardId: String!): ScorecardEntity!
   reorderCriteria(inputs: [ReorderCriterionInput!]!): Boolean!
   reorderTracks(inputs: [ReorderTrackInput!]!): [TrackEntity!]!
   rescheduleSession(input: RescheduleInput!): OperationResult!
   resetSchedule(eventId: String!): Boolean!
+  resetUserPassword(newPassword: String!, userId: String!): Boolean!
   resolveConflict(id: String!): ConflictEntity!
   saveScheduleSessions(inputs: [SaveScheduleInput!]!): [SessionEntity!]!
   saveScorecardDraft(input: SaveScorecardInput!): ScorecardEntity!
@@ -380,6 +399,13 @@ type Mutation {
   updateSessionStage(input: UpdateStageInput!): OperationResult!
   updateTeam(id: String!, input: UpdateTeamInput!): TeamEntity!
   updateTrack(id: String!, input: UpdateTrackInput!): TrackEntity!
+}
+
+type MyEvent {
+  id: String!
+  name: String!
+  role: String!
+  status: String!
 }
 
 type OperationResult {
@@ -408,6 +434,7 @@ type Query {
   judges(eventId: String!, judgeType: String, status: String): [JudgeEntity!]!
   judgingRounds(eventId: String!): [JudgingRoundType!]!
   me: UserResponse!
+  myEvents: [MyEvent!]!
   rankings(eventId: String!, trackId: String): RankingOutput
   room(id: String!): RoomEntity!
   rooms(eventId: String!): [RoomEntity!]!
@@ -425,6 +452,7 @@ type Query {
   timeSlots(date: DateTime, eventId: String!): [TimeSlotEntity!]!
   track(id: String!): TrackEntity!
   tracks(eventId: String!): [TrackEntity!]!
+  users: [UserEntity!]!
 }
 
 type RankingOutput {
@@ -486,6 +514,7 @@ enum Role {
   COORDINATOR
   JUDGE
   PANEL_CHAIR
+  SUPER_ADMIN
   TEAM_REP
 }
 
@@ -872,6 +901,13 @@ input UpdateTrackInput {
   description: String
   name: String
   status: TrackStatus
+}
+
+type UserEntity {
+  email: String!
+  id: String!
+  name: String!
+  role: String!
 }
 
 type UserResponse {

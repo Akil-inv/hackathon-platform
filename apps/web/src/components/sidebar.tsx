@@ -2,8 +2,18 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
+import { useEventStore } from '@/lib/event-store';
+import EventSelector from './event-selector';
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+  icon: string;
+  /** Global roles allowed to see this item. Omit for everyone. */
+  roles?: string[];
+};
+
+const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: '\u229E' },
   { label: 'Event Setup', href: '/dashboard/event', icon: '⚙' },
   { label: 'Schedule', href: '/dashboard/schedule', icon: '📅' },
@@ -13,13 +23,29 @@ const navItems = [
   { label: 'Conflicts', href: '/dashboard/conflicts', icon: '\u26A0' },
   { label: 'Judge Links', href: '/dashboard/judge-links', icon: '\u2709' },
   { label: 'Audit Log', href: '/dashboard/audit', icon: '\uD83D\uDCCB' },
+  {
+    label: 'Users & roles',
+    href: '/dashboard/users',
+    icon: '\uD83D\uDC65',
+    roles: ['SUPER_ADMIN', 'ADMIN'],
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  
+  const clearEvent = useEventStore((s) => s.clear);
+
+  const visibleItems = navItems.filter(
+    (item) => !item.roles || item.roles.includes(user?.role ?? ''),
+  );
+
+  const signOut = () => {
+    clearEvent();
+    logout();
+    router.push('/login');
+  };
 
   return (
     <aside className="flex h-screen w-64 flex-col bg-[#060a14] border-r border-white/[0.06]">
@@ -34,8 +60,11 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      <EventSelector />
+
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link key={item.href} href={item.href}
@@ -50,6 +79,7 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
       <div className="border-t border-white/[0.06] px-4 py-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#7c3aed]/30 to-[#6d28d9]/20 flex items-center justify-center text-sm font-semibold text-[#a78bfa] ring-1 ring-[#7c3aed]/20">
@@ -60,7 +90,7 @@ export default function Sidebar() {
             <p className="text-[10px] text-[#7c3aed] font-semibold uppercase tracking-wider">{user?.role}</p>
           </div>
         </div>
-        <button onClick={() => { logout(); router.push('/login'); }}
+        <button onClick={signOut}
           className="text-[12px] text-[#4a5568] hover:text-[#ef4444] transition-colors">
           Sign out
         </button>
