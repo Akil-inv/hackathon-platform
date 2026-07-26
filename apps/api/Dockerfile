@@ -15,4 +15,5 @@ RUN npx nest build
 EXPOSE 4000
 
 USER node
+USER node
 CMD ["sh", "-c", "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"]
