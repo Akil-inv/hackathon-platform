@@ -188,3 +188,9 @@ export const DASHBOARD_HEALTH_QUERY = `
     }
   }
 `;
+
+export const EVENT_USERS_QUERY = `
+  query EventUsers($eventId: String!) {
+    eventUsers(eventId: $eventId) { userId email name globalRole role }
+  }
+`;

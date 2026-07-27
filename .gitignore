@@ -19,3 +19,4 @@ api.log
 *.sh
 apps/api/create-*.js
 apps/api/fix-*.js
+docker-compose.override.yml

@@ -4,7 +4,6 @@ import { useQuery } from '@/lib/use-graphql';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, SESSIONS_QUERY, JUDGES_QUERY, ROOMS_QUERY } from '@/lib/queries';
-import { useEventId } from '@/lib/event-store';
 
 const SCORECARDS_QUERY = `query SC($eventId: String!) { scorecardsByEvent(eventId: $eventId) { id status totalScore judgeName teamName judgeId } }`;
 const RANKINGS_QUERY = `query R($eventId: String!) { rankings(eventId: $eventId) { id teamName totalScore rank trackName advancesToFinals pocAward } }`;
@@ -42,9 +41,7 @@ const Pill = ({ label, value, color }: { label: string; value: number; color: st
 
 export default function DashboardPage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
-  const selectedEventId = useEventId();
-  const event =
-    evData?.events?.find((e: any) => e.id === selectedEventId) ?? evData?.events?.[0];
+  const event = evData?.events?.[0];
   const eventId = event?.id;
   const { data: sessionData } = useQuery<any>(SESSIONS_QUERY, eventId ? { eventId } : undefined);
   const { data: judgeData } = useQuery<any>(JUDGES_QUERY, eventId ? { eventId } : undefined);

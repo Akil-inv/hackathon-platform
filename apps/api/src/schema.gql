@@ -232,6 +232,14 @@ enum EventStatus {
   DRAFT
 }
 
+type EventUserEntity {
+  email: String!
+  globalRole: String!
+  name: String!
+  role: String!
+  userId: String!
+}
+
 enum ExpertiseLevel {
   PRIMARY
   SECONDARY
@@ -426,6 +434,7 @@ type Query {
   conflictsByJudge(judgeId: String!): [ConflictEntity!]!
   conflictsByTeam(teamId: String!): [ConflictEntity!]!
   event(id: String!): EventEntity!
+  eventUsers(eventId: String!): [EventUserEntity!]!
   events: [EventEntity!]!
   findReplacementJudges(sessionId: String!): [ReplacementJudge!]!
   health: String!

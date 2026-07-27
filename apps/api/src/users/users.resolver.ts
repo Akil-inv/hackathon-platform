@@ -20,6 +20,18 @@ export class MyEvent {
   @Field() role!: string;
 }
 
+/** A user's role on one specific event, plus enough identity to render a row. */
+@ObjectType()
+export class EventUserEntity {
+  @Field() userId!: string;
+  @Field() email!: string;
+  @Field() name!: string;
+  /** Platform-wide role from the Role enum. */
+  @Field() globalRole!: string;
+  /** Role on this event, from the EventRole enum. */
+  @Field() role!: string;
+}
+
 @InputType()
 export class CreateUserInput {
   @Field() email!: string;
@@ -50,6 +62,12 @@ export class UsersResolver {
   @Query(() => [UserEntity])
   async users() {
     return this.usersService.listUsers();
+  }
+
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Query(() => [EventUserEntity])
+  async eventUsers(@Args('eventId') eventId: string) {
+    return this.usersService.listEventUsers(eventId);
   }
 
   @Roles('SUPER_ADMIN', 'ADMIN')

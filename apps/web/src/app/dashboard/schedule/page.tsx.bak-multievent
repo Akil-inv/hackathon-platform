@@ -8,7 +8,6 @@ import {
   CONFLICTS_QUERY, SESSIONS_QUERY, SAVE_SESSIONS_MUTATION, GENERATE_SCHEDULE_MUTATION
 } from '@/lib/queries';
 import StatusBadge from '@/components/status-badge';
-import { useEventId } from '@/lib/event-store';
 
 interface PlannerCard {
   teamId: string;
@@ -27,9 +26,7 @@ interface PlannerCard {
 
 export default function ScheduleBuilderPage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
-  const selectedEventId = useEventId();
-  const event =
-    evData?.events?.find((e: any) => e.id === selectedEventId) ?? evData?.events?.[0];
+  const event = evData?.events?.[0];
   const eventId = event?.id;
 
   const { data: teamData } = useQuery<any>(TEAMS_QUERY, eventId ? { eventId } : undefined);

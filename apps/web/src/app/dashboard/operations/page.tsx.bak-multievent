@@ -5,7 +5,6 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, SESSIONS_QUERY, JUDGES_QUERY, ROOMS_QUERY, TIMESLOTS_QUERY } from '@/lib/queries';
 import StatusBadge from '@/components/status-badge';
-import { useEventId } from '@/lib/event-store';
 
 const UPDATE_STAGE = `mutation U($input: UpdateStageInput!) { updateSessionStage(input: $input) { success message } }`;
 const SWAP_SESSIONS_MUT = `mutation SS($input: SwapSessionsInput!) { swapSessions(input: $input) { success message } }`;
@@ -17,9 +16,7 @@ const ADD_JUDGE_MUT = `mutation AJ($input: AddJudgeInput!) { addJudgeToSession(i
 
 export default function CommandCentrePage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
-  const selectedEventId = useEventId();
-  const event =
-    evData?.events?.find((e: any) => e.id === selectedEventId) ?? evData?.events?.[0];
+  const event = evData?.events?.[0];
   const eventId = event?.id;
   const { data: sessionData } = useQuery<any>(SESSIONS_QUERY, eventId ? { eventId } : undefined);
   const { data: judgeData } = useQuery<any>(JUDGES_QUERY, eventId ? { eventId } : undefined);

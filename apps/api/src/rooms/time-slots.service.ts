@@ -58,8 +58,9 @@ export class TimeSlotsService {
       return new Date(`${dateStr}T${timeStr}:00${utcOffset}`);
     };
 
-    // Parse the date in the event's timezone (midnight)
-    const slotDate = new Date(`${dateStr}T00:00:00${utcOffset}`);
+    // Midnight UTC, not local. `date` is a date-only column, so Postgres
+    // truncates in UTC — using the event offset here stores the previous day.
+    const slotDate = new Date(`${dateStr}T00:00:00Z`);
 
     const opStart = parseTime(operatingStart);
     const opEnd = parseTime(operatingEnd);

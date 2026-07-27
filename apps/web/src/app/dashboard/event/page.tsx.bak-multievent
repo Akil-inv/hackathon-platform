@@ -4,7 +4,6 @@ import { useQuery } from '@/lib/use-graphql';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, ROOMS_QUERY, JUDGES_QUERY } from '@/lib/queries';
-import { useEventId, useEventStore } from '@/lib/event-store';
 
 const TRACKS_QUERY = `query T($eventId: String!) { tracks(eventId: $eventId) { id name description status } }`;
 const TIMESLOTS_QUERY = `query TS($eventId: String!) { timeSlots(eventId: $eventId) { id date startTime endTime slotType } }`;
@@ -31,13 +30,7 @@ const slDS = (s: string) => s ? new Date(s).toLocaleDateString('en-CA',{timeZone
 
 export default function EventSetupPage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
-  const selectedEventId = useEventId();
-  const selectEvent = useEventStore((s) => s.selectEvent);
-  const setEvents = useEventStore((s) => s.setEvents);
-  const [creatingNew, setCreatingNew] = useState(false);
-  const event = creatingNew
-    ? undefined
-    : (evData?.events?.find((e: any) => e.id === selectedEventId) ?? evData?.events?.[0]);
+  const event = evData?.events?.[0];
   const eventId = event?.id;
   const { data: roomData } = useQuery<any>(ROOMS_QUERY, eventId ? { eventId } : undefined);
   const { data: judgeData } = useQuery<any>(JUDGES_QUERY, eventId ? { eventId } : undefined);
@@ -111,7 +104,7 @@ export default function EventSetupPage() {
   const judgingSlots = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length;
 
   // Step completion checks
-  const s1 = !!event; // Event created (false while creatingNew, showing the create form)
+  const s1 = !!event; // Event created
   const s2 = criteria.length > 0 && totalPoints === 100; // Scoring criteria set
   const s3 = tracks.length > 0; // Tracks exist
   const s4 = teams.length > 0; // Teams uploaded
@@ -229,27 +222,6 @@ export default function EventSetupPage() {
           {s1 && editingStep !== 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(1)}>Edit</button>}
           {editingStep === 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s1 && editingStep !== 1 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
-          {s1 && editingStep !== 1 && (
-            <button className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
-              onClick={() => {
-                // Blank the form. An effect prefills `ef` from the current
-                // event, so without this the create form opens holding the
-                // existing event's name and dates.
-                setEf({ name: '', description: '', location: '', timezone: 'Asia/Singapore',
-                  startDate: '', endDate: '', sessionDurationMinutes: 20,
-                  minJudgesPerTeam: 3, maxJudgesPerTeam: 5 });
-                setCreatingNew(true);
-                setEditingStep(null);
-              }}>
-              + New event
-            </button>
-          )}
-          {creatingNew && (
-            <button className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
-              onClick={() => setCreatingNew(false)}>
-              Cancel new event
-            </button>
-          )}
         </div>
         <div style={stepStyle(1, s1, true, editingStep === 1).body}>
         {(!s1 || editingStep === 1) ? (
@@ -279,21 +251,7 @@ export default function EventSetupPage() {
                 if (d) { show('Event updated'); setEditingStep(null); reload(); }
               } else {
                 const d = await run(CREATE_EVENT, { input: { ...ef, startDate: ef.startDate+'T00:00:00+08:00', endDate: ef.endDate+'T00:00:00+08:00' } });
-                if (d) {
-                  show('Event created');
-                  const created = d.createEvent;
-                  if (created?.id) {
-                    // Add to the store and select it so the sidebar and every
-                    // other page point at the new event, not the old one.
-                    const existing = (evData?.events || []).map((e: any) => ({
-                      id: e.id, name: e.name, status: e.status,
-                    }));
-                    setEvents([...existing, { id: created.id, name: created.name, status: created.status }]);
-                    selectEvent(created.id);
-                  }
-                  setCreatingNew(false);
-                  reload();
-                }
+                if (d) { show('Event created'); reload(); }
               }
             }}>{s1 ? 'Save changes' : 'Create event'}</button>
           </>

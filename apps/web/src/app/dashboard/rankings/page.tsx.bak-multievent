@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
-import { useEventId } from '@/lib/event-store';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -240,7 +239,6 @@ function MethodologyModal({ onClose }: { onClose: () => void }) {
 // ─── Main Page ───
 export default function RankingsPage() {
   const token = useAuthStore((s) => s.token);
-  const selectedEventId = useEventId();
   const [eventId, setEventId] = useState('');
   const [events, setEvents] = useState<any[]>([]);
   const [tracks, setTracks] = useState<any[]>([]);
@@ -256,12 +254,7 @@ export default function RankingsPage() {
     gql(EVENTS_Q, {}, token).then(d => {
       const evts = d.events || [];
       setEvents(evts);
-      if (evts.length > 0 && !eventId) {
-        const preferred = evts.some((e: any) => e.id === selectedEventId)
-          ? selectedEventId
-          : evts[0].id;
-        setEventId(preferred);
-      }
+      if (evts.length > 0 && !eventId) setEventId(evts[0].id);
     }).catch(() => {});
   }, [token]);
 

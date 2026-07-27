@@ -6,6 +6,7 @@ import { createClient } from '@/lib/graphql-client';
 import { useEventStore } from '@/lib/event-store';
 import {
   USERS_QUERY,
+  EVENT_USERS_QUERY,
   CREATE_USER_MUTATION,
   ASSIGN_EVENT_ROLE_MUTATION,
   REMOVE_EVENT_ROLE_MUTATION,
@@ -17,6 +18,14 @@ type User = {
   id: string;
   email: string;
   name: string;
+  role: string;
+};
+
+type EventUser = {
+  userId: string;
+  email: string;
+  name: string;
+  globalRole: string;
   role: string;
 };
 
@@ -59,6 +68,8 @@ export default function UsersPage() {
   const event = useEventStore((s) => s.event);
 
   const [users, setUsers] = useState<User[]>([]);
+  /** userId -> current role on the selected event. */
+  const [eventRoles, setEventRoles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -73,14 +84,13 @@ export default function UsersPage() {
     globalRole: 'COORDINATOR',
   });
 
-  /** Per-row selection for the event role dropdowns. */
+  /** Pending dropdown selections, keyed by userId. Falls back to the saved role. */
   const [roleChoice, setRoleChoice] = useState<Record<string, string>>({});
 
   const canManage = ROLES_THAT_MANAGE_USERS.includes(currentUser?.role ?? '');
 
-  const load = useCallback(async () => {
+  const loadUsers = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
     try {
       const res = await createClient(token).query(USERS_QUERY, {}).toPromise();
       if (res.error) {
@@ -91,15 +101,38 @@ export default function UsersPage() {
       setError(null);
     } catch (e: any) {
       setError(e?.message ?? 'Could not load users');
-    } finally {
-      setLoading(false);
     }
   }, [token]);
 
+  const loadEventRoles = useCallback(async () => {
+    if (!token || !eventId) {
+      setEventRoles({});
+      return;
+    }
+    try {
+      const res = await createClient(token).query(EVENT_USERS_QUERY, { eventId }).toPromise();
+      if (res.error) {
+        // Non-fatal: the page still works without saved-role display.
+        setEventRoles({});
+        return;
+      }
+      const rows: EventUser[] = res.data?.eventUsers ?? [];
+      setEventRoles(Object.fromEntries(rows.map((r) => [r.userId, r.role])));
+    } catch {
+      setEventRoles({});
+    }
+  }, [token, eventId]);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([loadUsers(), loadEventRoles()]);
+    setLoading(false);
+  }, [loadUsers, loadEventRoles]);
+
   useEffect(() => {
-    if (canManage) load();
+    if (canManage) loadAll();
     else setLoading(false);
-  }, [canManage, load]);
+  }, [canManage, loadAll]);
 
   /** Runs a mutation, surfaces errors, and refreshes on success. */
   const run = async (
@@ -107,7 +140,7 @@ export default function UsersPage() {
     query: string,
     variables: Record<string, any>,
     successMessage: string,
-    refresh = true,
+    refresh: 'all' | 'roles' | 'none' = 'all',
   ) => {
     if (!token) return;
     setBusy(key);
@@ -120,7 +153,8 @@ export default function UsersPage() {
         return;
       }
       setNotice(successMessage);
-      if (refresh) await load();
+      if (refresh === 'all') await loadAll();
+      else if (refresh === 'roles') await loadEventRoles();
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong');
     } finally {
@@ -157,13 +191,13 @@ export default function UsersPage() {
 
   const assignRole = (user: User) => {
     if (!eventId) return;
-    const role = roleChoice[user.id] ?? EVENT_ROLES[1];
+    const role = roleChoice[user.id] ?? eventRoles[user.id] ?? EVENT_ROLES[1];
     return run(
       `assign-${user.id}`,
       ASSIGN_EVENT_ROLE_MUTATION,
       { input: { userId: user.id, eventId, role } },
       `${user.name || user.email} is now ${role} on ${event?.name ?? 'this event'}.`,
-      false,
+      'roles',
     );
   };
 
@@ -174,7 +208,7 @@ export default function UsersPage() {
       REMOVE_EVENT_ROLE_MUTATION,
       { userId: user.id, eventId },
       `Removed ${user.name || user.email} from ${event?.name ?? 'this event'}.`,
-      false,
+      'roles',
     );
   };
 
@@ -190,7 +224,7 @@ export default function UsersPage() {
       RESET_USER_PASSWORD_MUTATION,
       { userId: user.id, newPassword },
       `Password reset for ${user.email}.`,
-      false,
+      'none',
     );
   };
 
@@ -213,6 +247,8 @@ export default function UsersPage() {
   const inputClass =
     'w-full rounded-lg border border-dark-500 bg-dark-900/60 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-[#7c3aed]/50';
 
+  const assignedCount = Object.keys(eventRoles).length;
+
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
@@ -220,7 +256,7 @@ export default function UsersPage() {
           <h1 className="text-xl font-bold text-white">Users &amp; roles</h1>
           <p className="mt-1 text-sm text-slate-400">
             {event?.name
-              ? `Event roles apply to ${event.name}.`
+              ? `Event roles apply to ${event.name}. ${assignedCount} assigned.`
               : 'Select an event in the sidebar to assign event roles.'}
           </p>
         </div>
@@ -338,6 +374,10 @@ export default function UsersPage() {
           <tbody>
             {users.map((user) => {
               const isSelf = user.id === currentUser?.id;
+              const savedRole = eventRoles[user.id];
+              const selected = roleChoice[user.id] ?? savedRole ?? EVENT_ROLES[1];
+              const isDirty = savedRole !== undefined && selected !== savedRole;
+
               return (
                 <tr key={user.id} className="border-b border-dark-600/50 last:border-0">
                   <td className="px-5 py-4">
@@ -358,9 +398,16 @@ export default function UsersPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
+                      <span className="w-24 shrink-0 text-xs">
+                        {savedRole ? (
+                          <span className="font-medium text-emerald-300">{savedRole}</span>
+                        ) : (
+                          <span className="text-slate-600">Not assigned</span>
+                        )}
+                      </span>
                       <select
                         disabled={!eventId}
-                        value={roleChoice[user.id] ?? EVENT_ROLES[1]}
+                        value={selected}
                         onChange={(e) =>
                           setRoleChoice((prev) => ({ ...prev, [user.id]: e.target.value }))
                         }
@@ -377,12 +424,18 @@ export default function UsersPage() {
                         disabled={!eventId || busy === `assign-${user.id}`}
                         className="rounded-lg bg-accent/90 px-2.5 py-1.5 text-xs text-white hover:bg-accent disabled:opacity-40"
                       >
-                        {busy === `assign-${user.id}` ? 'Saving…' : 'Assign'}
+                        {busy === `assign-${user.id}`
+                          ? 'Saving…'
+                          : isDirty
+                            ? 'Change'
+                            : savedRole
+                              ? 'Reassign'
+                              : 'Assign'}
                       </button>
                       <button
                         onClick={() => removeRole(user)}
-                        disabled={!eventId || busy === `remove-${user.id}`}
-                        className="rounded-lg border border-dark-500 bg-dark-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-dark-600 disabled:opacity-40"
+                        disabled={!eventId || !savedRole || busy === `remove-${user.id}`}
+                        className="rounded-lg border border-dark-500 bg-dark-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-dark-600 disabled:opacity-30"
                       >
                         Remove
                       </button>

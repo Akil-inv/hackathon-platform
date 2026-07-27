@@ -23,6 +23,28 @@ export class UsersService {
     });
   }
 
+  /**
+   * Everyone holding a role on one event.
+   *
+   * Without this the Users page can assign roles but never read them back, so
+   * the role column shows no current state and reassigning is guesswork.
+   */
+  async listEventUsers(eventId: string) {
+    const rows = await this.prisma.eventUser.findMany({
+      where: { eventId },
+      include: { user: { select: { id: true, email: true, name: true, role: true } } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return rows.map((eu: any) => ({
+      userId: eu.user.id,
+      email: eu.user.email,
+      name: eu.user.name,
+      globalRole: eu.user.role,
+      role: eu.role,
+    }));
+  }
+
   async assignToEvent(userId: string, eventId: string, role: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
