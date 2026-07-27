@@ -136,6 +136,8 @@ export class TeamsService {
             name: teamName,
             projectName: row.project_name.trim(),
             useCaseTitle: row.use_case_title?.trim() || null,
+            problemStatement: row.problem_statement?.trim() || null,
+            solutionSummary: row.solution_summary?.trim() || null,
             teamLeadName: row.team_lead_name?.trim() || teamName,
             teamLeadEmail: row.team_lead_email.trim(),
             organisation: row.organisation?.trim() || null,

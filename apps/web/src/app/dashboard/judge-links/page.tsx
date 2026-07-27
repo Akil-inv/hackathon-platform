@@ -4,6 +4,7 @@ import { useQuery } from '@/lib/use-graphql';
 import { EVENTS_QUERY } from '@/lib/queries';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
+import { useEventId } from '@/lib/event-store';
 
 const JUDGE_LINKS_QUERY = `query JudgeLinks($eventId: String!) { judgeLinks(eventId: $eventId) { judgeId name email phone token link } }`;
 
@@ -17,10 +18,14 @@ type NotifConfig = {
 
 export default function JudgeLinksPage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
-  const eventId = evData?.events?.[0]?.id;
-  const eventName = evData?.events?.[0]?.name || 'Hackathon';
+  const selectedEventId = useEventId();
+  const currentEvent =
+    evData?.events?.find((e: any) => e.id === selectedEventId) ?? evData?.events?.[0];
+  const eventId = currentEvent?.id;
+  const eventName = currentEvent?.name || 'Hackathon';
   const token = useAuthStore((s) => s.token);
   const [links, setLinks] = useState<any[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(true);
   const [copied, setCopied] = useState('');
   const [showConfig, setShowConfig] = useState(false);
   const [sending, setSending] = useState<string | null>(null);
@@ -48,10 +53,16 @@ export default function JudgeLinksPage() {
 
   useEffect(() => {
     if (!eventId || !token) return;
+    // Reset before fetching so switching events does not briefly show the
+    // previous event's links.
+    setLoadingLinks(true);
+    setLinks([]);
     const client = createClient(token);
-    client.query(JUDGE_LINKS_QUERY, { eventId }).toPromise().then(res => {
-      setLinks(res.data?.judgeLinks || []);
-    });
+    client.query(JUDGE_LINKS_QUERY, { eventId }).toPromise()
+      .then(res => {
+        setLinks(res.data?.judgeLinks || []);
+      })
+      .finally(() => setLoadingLinks(false));
   }, [eventId, token]);
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -283,7 +294,14 @@ ${eventName} Team`}
                   <p className="text-sm font-medium text-white">{link.name}</p>
                   {isSent && <span className="text-xs text-green-400">✓ Sent</span>}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">{link.email}</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {link.email}
+                  {link.phone ? (
+                    <span className="ml-2 text-slate-500">{link.phone}</span>
+                  ) : (
+                    <span className="ml-2 text-slate-600">no phone</span>
+                  )}
+                </p>
                 <p className="text-xs text-slate-600 font-mono mt-0.5">{baseUrl}{link.link}</p>
               </div>
               <div className="flex items-center gap-2">
@@ -310,7 +328,18 @@ ${eventName} Team`}
         })}
         {links.length === 0 && (
           <div className="rounded-xl border border-dark-600 bg-dark-800/50 py-12 text-center">
-            <p className="text-sm text-slate-500">Loading judge links...</p>
+            {loadingLinks ? (
+              <p className="text-sm text-slate-500">Loading judge links...</p>
+            ) : (
+              <>
+                <p className="text-sm text-slate-400">
+                  No judges on {eventName} yet.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Import judges in Event Setup, then their links appear here.
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

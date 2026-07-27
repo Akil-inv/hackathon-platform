@@ -44,7 +44,10 @@ export class JudgePortalService {
           scorecardStatus: sc?.status || 'NO_SCORECARD', totalScore: sc?.totalScore || null,
           team: { name: s.team.name, projectName: s.team.projectName, track: s.team.track?.name || null,
             organisation: s.team.organisation || null, department: (s.team as any).department || null,
-            vendorTools: (s.team as any).vendorTools || null, techStack: s.team.techStack || null },
+            vendorTools: (s.team as any).vendorTools || null, techStack: s.team.techStack || null,
+            useCaseTitle: s.team.useCaseTitle || null,
+            problemStatement: s.team.problemStatement || null,
+            solutionSummary: s.team.solutionSummary || null },
           room: s.room.name, date: s.timeSlot.date, startTime: s.timeSlot.startTime, endTime: s.timeSlot.endTime, stage: s.stage,
           fellowJudges: s.judges.filter((j: any) => j.judgeId !== judge.id).map((j: any) => ({ name: j.judge.name, type: j.judge.judgeType })),
         };

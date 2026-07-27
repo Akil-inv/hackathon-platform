@@ -14,6 +14,7 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     rooms = req.rooms
     min_j = req.min_judges_per_team
     max_j = req.max_judges_per_team
+    locked = req.locked_sessions
 
     n_teams = len(teams)
     n_slots = len(slots)
@@ -30,6 +31,34 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     # Index maps
     team_idx = {t.id: i for i, t in enumerate(teams)}
     slot_idx = {s.id: i for i, s in enumerate(slots)}
+    room_idx = {r.id: i for i, r in enumerate(rooms)}
+    judge_idx = {j.id: i for i, j in enumerate(judges)}
+
+    # ─── Locked sessions ───
+    # Sessions that already exist (manually placed, or from an earlier partial
+    # generation). Their teams are absent from `teams`, so they are not
+    # re-solved — but the resources they consume must be blocked out.
+
+    # (slot, room) pairs already occupied
+    occupied_room_slots: set[tuple[int, int]] = set()
+    # (judge, slot) pairs where the judge is already committed
+    busy_judge_slots: set[tuple[int, int]] = set()
+    # How many sessions each judge already has, so max_sessions and workload
+    # balance account for work the solver cannot see.
+    prior_judge_load: dict[int, int] = {j: 0 for j in range(n_judges)}
+
+    for ls in locked:
+        s_i = slot_idx.get(ls.slot_id)
+        r_i = room_idx.get(ls.room_id)
+        if s_i is not None and r_i is not None:
+            occupied_room_slots.add((s_i, r_i))
+        for jid in ls.judge_ids:
+            j_i = judge_idx.get(jid)
+            if j_i is None:
+                continue
+            prior_judge_load[j_i] += 1
+            if s_i is not None:
+                busy_judge_slots.add((j_i, s_i))
 
     # Judge availability as set of slot indices
     judge_avail = {}
@@ -89,10 +118,21 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
         for r in range(n_rooms):
             model.add(sum(x[t, s, r] for t in range(n_teams)) <= 1)
 
+    # 2b. Room-slots taken by locked sessions are unavailable
+    for (s, r) in occupied_room_slots:
+        for t in range(n_teams):
+            model.add(x[t, s, r] == 0)
+
     # 3. A judge can only be in one room per slot (no double-booking)
     for j in range(n_judges):
         for s in range(n_slots):
             model.add(sum(y[j, t, s, r] for t in range(n_teams) for r in range(n_rooms)) <= 1)
+
+    # 3b. Judges committed to a locked session are unavailable in that slot
+    for (j, s) in busy_judge_slots:
+        for t in range(n_teams):
+            for r in range(n_rooms):
+                model.add(y[j, t, s, r] == 0)
 
     # 4. Judge assigned only if team is in that slot-room
     for j in range(n_judges):
@@ -130,29 +170,40 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
                 for r in range(n_rooms):
                     model.add(y[j, t, s, r] == 0)
 
-    # 9. Judge max sessions
+    # 9. Judge max sessions — reduced by whatever the judge is already
+    #    committed to in locked sessions.
     for j_i, j in enumerate(judges):
         max_sessions = getattr(j, 'max_sessions', None)
         if max_sessions and max_sessions > 0:
+            remaining = max(0, max_sessions - prior_judge_load[j_i])
             model.add(
                 sum(y[j_i, t, s, r] for t in range(n_teams) for s in range(n_slots) for r in range(n_rooms))
-                <= max_sessions
+                <= remaining
             )
 
     # ─── Soft Objectives ───
 
-    # A. Minimize workload imbalance
+    # A. Minimize workload imbalance.
+    #    Load includes locked sessions, so a judge with three manual sessions
+    #    does not look idle and get loaded up again.
+    max_prior = max(prior_judge_load.values()) if prior_judge_load else 0
+    load_ub = n_teams + max_prior
+
     judge_loads = []
     for j in range(n_judges):
-        load = model.new_int_var(0, n_teams, f"load_j{j}")
-        model.add(load == sum(y[j, t, s, r] for t in range(n_teams) for s in range(n_slots) for r in range(n_rooms)))
+        load = model.new_int_var(0, load_ub, f"load_j{j}")
+        model.add(
+            load
+            == sum(y[j, t, s, r] for t in range(n_teams) for s in range(n_slots) for r in range(n_rooms))
+            + prior_judge_load[j]
+        )
         judge_loads.append(load)
 
-    max_load = model.new_int_var(0, n_teams, "max_load")
-    min_load = model.new_int_var(0, n_teams, "min_load")
+    max_load = model.new_int_var(0, load_ub, "max_load")
+    min_load = model.new_int_var(0, load_ub, "min_load")
     model.add_max_equality(max_load, judge_loads)
     model.add_min_equality(min_load, judge_loads)
-    load_diff = model.new_int_var(0, n_teams, "load_diff")
+    load_diff = model.new_int_var(0, load_ub, "load_diff")
     model.add(load_diff == max_load - min_load)
 
     # B. Room stickiness: penalize judge changing rooms between consecutive slots
@@ -198,9 +249,16 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     solve_time = time.time() - start_time
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        warnings = ["Solver could not find a feasible schedule. Check constraints."]
+        if locked:
+            warnings.append(
+                f"{len(locked)} session(s) were locked in place. Manual placements "
+                "restrict the solver — try resetting the schedule and generating "
+                "everything at once."
+            )
         return ScheduleResponse(
             success=False,
-            warnings=["Solver could not find a feasible schedule. Check constraints."],
+            warnings=warnings,
             solve_time_seconds=solve_time,
         )
 
@@ -237,6 +295,8 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
 
     # Quality score
     warnings = []
+    if locked:
+        warnings.append(f"{len(locked)} existing session(s) kept in place")
     if unscheduled:
         warnings.append(f"{len(unscheduled)} teams could not be scheduled")
 

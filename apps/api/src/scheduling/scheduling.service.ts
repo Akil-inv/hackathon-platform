@@ -18,7 +18,7 @@ export class SchedulingService {
 
   async generateSchedule(eventId: string, minJudges: number, maxJudges: number, userId: string) {
     // Gather all data for the solver
-    const [teams, judges, slots, rooms, conflicts] = await Promise.all([
+    const [teams, judges, slots, rooms, conflicts, existingSessions] = await Promise.all([
       this.prisma.team.findMany({
         where: { eventId, deletedAt: null, status: { in: ['ELIGIBLE', 'DRAFT', 'SUBMITTED'] } },
       }),
@@ -36,7 +36,43 @@ export class SchedulingService {
       this.prisma.conflictDeclaration.findMany({
         where: { eventId, status: 'ACTIVE' },
       }),
+      // Sessions that already exist — manually placed, or left from an earlier
+      // partial generation. These are kept as-is and worked around.
+      this.prisma.judgingSession.findMany({
+        where: { eventId },
+        include: { judges: true },
+      }),
     ]);
+
+    // Teams that already have a session are not re-solved. Everything else is
+    // handed to the solver.
+    const scheduledTeamIds = new Set(existingSessions.map(s => s.teamId));
+    const teamsToSchedule = teams.filter(t => !scheduledTeamIds.has(t.id));
+
+    // The solver still needs to know what those sessions consume: their
+    // room-slot is taken, their judges are busy in that slot, and those judges
+    // have already used part of their session budget.
+    const lockedSessions = existingSessions.map(s => ({
+      team_id: s.teamId,
+      room_id: s.roomId,
+      slot_id: s.timeSlotId,
+      judge_ids: s.judges.map(sj => sj.judgeId),
+    }));
+
+    if (teamsToSchedule.length === 0) {
+      return {
+        success: true,
+        sessions: [],
+        unscheduledTeams: [],
+        warnings: [
+          existingSessions.length > 0
+            ? `All ${existingSessions.length} team(s) are already scheduled. Reset the schedule to regenerate.`
+            : 'No teams to schedule.',
+        ],
+        qualityScore: 0,
+        solveTimeSeconds: 0,
+      };
+    }
 
     // Map judge availability to slot IDs
     const judgeInputs = judges.map(j => {
@@ -65,7 +101,7 @@ export class SchedulingService {
 
     const payload = {
       event_id: eventId,
-      teams: teams.map(t => ({ id: t.id, name: t.name, track_id: t.trackId })),
+      teams: teamsToSchedule.map(t => ({ id: t.id, name: t.name, track_id: t.trackId })),
       judges: judgeInputs,
       slots: slots.map(s => ({
         id: s.id,
@@ -76,6 +112,7 @@ export class SchedulingService {
       rooms: rooms.map(r => ({ id: r.id, name: r.name })),
       min_judges_per_team: minJudges,
       max_judges_per_team: maxJudges,
+      locked_sessions: lockedSessions,
     };
 
     // Call the Python solver
@@ -99,6 +136,7 @@ export class SchedulingService {
         entityId: eventId,
         newValues: {
           sessions: result.sessions?.length || 0,
+          locked: lockedSessions.length,
           unscheduled: result.unscheduled_teams?.length || 0,
           quality: result.quality_score,
           solveTime: result.solve_time_seconds,

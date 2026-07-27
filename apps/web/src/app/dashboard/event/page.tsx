@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, ROOMS_QUERY, JUDGES_QUERY } from '@/lib/queries';
 import { useEventId, useEventStore } from '@/lib/event-store';
+import ReadinessPlanner from '@/components/readiness-planner';
 
 const TRACKS_QUERY = `query T($eventId: String!) { tracks(eventId: $eventId) { id name description status } }`;
 const TIMESLOTS_QUERY = `query TS($eventId: String!) { timeSlots(eventId: $eventId) { id date startTime endTime slotType } }`;
@@ -127,6 +128,8 @@ export default function EventSetupPage() {
   const judgeSessionsNeeded = teams.length * minJudges;
   const sessionDuration = ef.sessionDurationMinutes || 20;
   const slotsPerRoom = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length / Math.max(rooms.length, 1);
+  // Number of days the event runs, used to turn total slots into slots/day.
+  const evDayCount = Math.max(getEvDays(ef.startDate, ef.endDate).length, 1);
   const roomSessionCapacity = rooms.length * slotsPerRoom;
 
   const capacityWarnings: string[] = [];
@@ -158,8 +161,17 @@ export default function EventSetupPage() {
 
   // New criterion form
   const [newCrit, setNewCrit] = useState({ name: '', maxScore: 10, description: '', requiresComment: false });
-  const tierColors: Record<string,string> = { L1: '#3b82f6', L2: '#f59e0b', L3: '#ef4444' };
-  const tierLabels: Record<string,string> = { L1: 'Leads & Vendors', L2: 'ED / MD', L3: 'MEC' };
+  // L1 is most senior, L4 least. Vendors sit on their own V1-V3 track at equal
+  // standing to each other. L1 judges are held back for the final round; L2
+  // judges anchor a room for the whole event.
+  const tierColors: Record<string,string> = {
+    L1: '#ef4444', L2: '#f59e0b', L3: '#3b82f6', L4: '#64748b',
+    V1: '#10b981', V2: '#10b981', V3: '#10b981',
+  };
+  const tierLabels: Record<string,string> = {
+    L1: 'Leadership (final round)', L2: 'MD - room anchor', L3: 'ED', L4: 'Senior',
+    V1: 'Vendor', V2: 'Vendor', V3: 'Vendor',
+  };
   const typeColors: Record<string,string> = { TECHNICAL: '#3b82f6', BUSINESS: '#10b981', DOMAIN: '#7c3aed', INNOVATION: '#f59e0b', EXECUTIVE: '#ef4444' };
 
   const [editingStep, setEditingStep] = useState<number|null>(null);
@@ -463,7 +475,7 @@ export default function EventSetupPage() {
             {teams.length > 0 ? 'Upload more' : 'Upload teams CSV'}
             <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('teams', e.target.files[0]); }} />
           </label>
-          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack</span>
+          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary</span>
         </div>
         {!s3 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load teams. Track names must match the tracks above.</div>}
 
@@ -516,11 +528,30 @@ export default function EventSetupPage() {
             {judges.length > 0 ? 'Upload more' : 'Upload judges CSV'}
             <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('judges', e.target.files[0]); }} />
           </label>
-          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, judge_type, judge_tier, organisation, max_sessions</span>
+          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, phone, judge_type, judge_tier, organisation, max_sessions</span>
         </div>
         {!s4 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load judges.</div>}
       </div>
       </div>
+
+      {/* ─── Capacity check ─── */}
+      {/* Shown as soon as teams and judges exist, so shortfalls surface before
+          the solver spends 120 seconds discovering them. */}
+      {s4 && s5 && (
+        <div style={{ marginLeft: 42, marginBottom: 16 }}>
+          <ReadinessPlanner
+            teams={teams}
+            judges={judges}
+            roomCount={Math.max(rooms.length, 1)}
+            slotsPerDay={Math.max(Math.round(slotsPerRoom / Math.max(evDayCount, 1)), 1)}
+            eventDays={evDayCount}
+            minJudgesPerTeam={minJudges}
+            maxConsecutive={4}
+            anchorTier="L2"
+            excludedTiers={['L1']}
+          />
+        </div>
+      )}
 
       {/* ─── STEP 6: Rooms ─── */}
       <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).wrapper}>

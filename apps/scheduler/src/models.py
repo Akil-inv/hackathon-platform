@@ -25,6 +25,21 @@ class RoomInput(BaseModel):
     id: str
     name: str
 
+class LockedSession(BaseModel):
+    """
+    A session that already exists and must not be moved.
+
+    Manually placed sessions are not re-solved, but the solver still has to
+    know about them: their room-slot is occupied, their judges are busy in
+    that slot, and those judges have already used part of their session
+    budget. Without this the solver produces a schedule that looks valid but
+    double-books rooms and judges against work that already exists.
+    """
+    team_id: str
+    room_id: str
+    slot_id: str
+    judge_ids: list[str] = []
+
 class ScheduleRequest(BaseModel):
     event_id: str
     teams: list[TeamInput]
@@ -33,6 +48,9 @@ class ScheduleRequest(BaseModel):
     rooms: list[RoomInput]
     min_judges_per_team: int = 3
     max_judges_per_team: int = 5
+    # Sessions that already exist and are being worked around. Teams in
+    # `teams` are the ones still to schedule; these are not re-solved.
+    locked_sessions: list[LockedSession] = []
 
 class SessionAssignment(BaseModel):
     team_id: str

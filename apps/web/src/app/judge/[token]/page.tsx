@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import StatusBadge from '@/components/status-badge';
+import DriftMetronome from '@/components/drift-metronome';
 
 export default function JudgePortalPage() {
   const params = useParams();
@@ -264,6 +265,10 @@ export default function JudgePortalPage() {
         )}
 
         {/* Schedule cards */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1" />
+          <DriftMetronome scorecards={scorecards} sessions={sessions} />
+        </div>
         <div className="space-y-8">
           {sessions.length === 0 ? (
             <div className="rounded-xl border border-[#1e293b] bg-[#111827] py-16 text-center">
@@ -315,6 +320,22 @@ export default function JudgePortalPage() {
                           {s.team.department && <span className="px-2 py-0.5 rounded bg-[#3b82f615] border border-[#3b82f630] text-xs text-[#3b82f6]">{s.team.department}</span>}
                           {s.team.organisation && <span className="px-2 py-0.5 rounded bg-[#1e293b] border border-[#334155] text-xs text-gray-300">{s.team.organisation}</span>}
                         </div>
+                        {(s.team.problemStatement || s.team.solutionSummary) && (
+                          <div className="mt-3 rounded-lg border border-[#1e293b] bg-[#0f172a] px-3 py-2.5">
+                            {s.team.problemStatement && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-gray-500">Problem</p>
+                                <p className="mt-0.5 text-sm leading-relaxed text-gray-300">{s.team.problemStatement}</p>
+                              </div>
+                            )}
+                            {s.team.solutionSummary && (
+                              <div className={s.team.problemStatement ? 'mt-2.5' : ''}>
+                                <p className="text-[10px] uppercase tracking-wider text-gray-500">Solution</p>
+                                <p className="mt-0.5 text-sm leading-relaxed text-gray-300">{s.team.solutionSummary}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {s.team.vendorTools && (
                           <div className="mt-2">
                             <div className="flex flex-wrap gap-1.5">
