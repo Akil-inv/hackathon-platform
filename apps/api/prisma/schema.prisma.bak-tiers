@@ -238,12 +238,9 @@ model TeamMember {
 // ─── Judge ─────────────────────────────────────────────
 
 enum JudgeTier {
-  L1 // Leadership - held back for the final round
-  L2 // MD - anchors one room for the whole event
-  L3 // ED - rotates between rooms
-  L4 // Senior - rotates between rooms
-  PS // Professional services - continuous, lunch break only
-  V  // Vendor - own platform only, additive to the panel
+  L1 // Leads and Vendors - Round 1 only
+  L2 // ED and MD - Round 1 + Round 2
+  L3 // MEC - Round 2 Final only
 }
 
 enum JudgeType {
