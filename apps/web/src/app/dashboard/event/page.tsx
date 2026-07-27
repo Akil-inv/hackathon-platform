@@ -273,12 +273,12 @@ export default function EventSetupPage() {
               if (s1) {
                 const input: any = { name: ef.name, description: ef.description, location: ef.location, timezone: ef.timezone,
                   sessionDurationMinutes: ef.sessionDurationMinutes, minJudgesPerTeam: ef.minJudgesPerTeam, maxJudgesPerTeam: ef.maxJudgesPerTeam };
-                if (ef.startDate) input.startDate = ef.startDate + 'T00:00:00+08:00';
-                if (ef.endDate) input.endDate = ef.endDate + 'T00:00:00+08:00';
+                if (ef.startDate) input.startDate = ef.startDate + 'T00:00:00Z';
+                if (ef.endDate) input.endDate = ef.endDate + 'T00:00:00Z';
                 const d = await run(UPDATE_EVENT, { id: event.id, input });
                 if (d) { show('Event updated'); setEditingStep(null); reload(); }
               } else {
-                const d = await run(CREATE_EVENT, { input: { ...ef, startDate: ef.startDate+'T00:00:00+08:00', endDate: ef.endDate+'T00:00:00+08:00' } });
+                const d = await run(CREATE_EVENT, { input: { ...ef, startDate: ef.startDate+'T00:00:00Z', endDate: ef.endDate+'T00:00:00Z' } });
                 if (d) {
                   show('Event created');
                   const created = d.createEvent;
