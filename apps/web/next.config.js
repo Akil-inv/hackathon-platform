@@ -41,6 +41,12 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${DEV_API_ORIGIN}/api/:path*`,
       },
+      {
+        // The schedule page fetches /graphql directly rather than going
+        // through the urql client, so it needs the same treatment.
+        source: '/graphql',
+        destination: `${DEV_API_ORIGIN}/graphql`,
+      },
     ];
   },
 };
