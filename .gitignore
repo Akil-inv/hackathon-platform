@@ -20,3 +20,5 @@ api.log
 apps/api/create-*.js
 apps/api/fix-*.js
 docker-compose.override.yml
+*.bak-multievent
+*.bak-eventid
