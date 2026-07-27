@@ -33,6 +33,51 @@ export class SessionsService {
 
   async saveFromSchedule(inputs: SaveScheduleInput[], userId: string) {
     const results = [];
+
+    // Auto-Generate solves the full team set from scratch, so any team that
+    // already has a session would end up with two — two rooms, two time
+    // slots, and duplicate scorecards feeding into rankings. Clear the
+    // existing sessions for these teams first.
+    //
+    // Scorecards and session-judge rows are removed explicitly because the
+    // foreign keys are RESTRICT; criterion_scores go first because they
+    // reference the scorecards.
+    const teamIds = [...new Set(inputs.map((i) => i.teamId))];
+    const eventIdForClear = inputs[0]?.eventId;
+
+    if (eventIdForClear && teamIds.length > 0) {
+      const existing = await this.prisma.judgingSession.findMany({
+        where: { eventId: eventIdForClear, teamId: { in: teamIds } },
+        select: { id: true },
+      });
+      const existingIds = existing.map((s) => s.id);
+
+      if (existingIds.length > 0) {
+        await this.prisma.$transaction(async (tx) => {
+          const scorecards = await tx.scorecard.findMany({
+            where: { sessionId: { in: existingIds } },
+            select: { id: true },
+          });
+          const scorecardIds = scorecards.map((sc) => sc.id);
+
+          if (scorecardIds.length > 0) {
+            await tx.criterionScore.deleteMany({ where: { scorecardId: { in: scorecardIds } } });
+            await tx.scorecard.deleteMany({ where: { id: { in: scorecardIds } } });
+          }
+          await tx.sessionJudge.deleteMany({ where: { sessionId: { in: existingIds } } });
+          await tx.judgingSession.deleteMany({ where: { id: { in: existingIds } } });
+        });
+
+        await this.audit.log({
+          userId, eventId: eventIdForClear,
+          action: AuditAction.DELETE, entityType: 'JudgingSession',
+          entityId: 'batch-replaced',
+          reason: 'Replaced by a newly generated schedule',
+          oldValues: { count: existingIds.length },
+        });
+      }
+    }
+
     for (const input of inputs) {
       const slot = await this.prisma.timeSlot.findUnique({ where: { id: input.timeSlotId } });
 

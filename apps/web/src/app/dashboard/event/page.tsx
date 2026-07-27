@@ -359,6 +359,16 @@ export default function EventSetupPage() {
             <input className="inp" placeholder="Description (optional)" value={newCrit.description} onChange={e => setNewCrit({...newCrit, description: e.target.value})} style={{marginTop:6}} />
             <button className="btn btn-pri btn-sm" style={{marginTop:8}} onClick={async () => {
               if (!newCrit.name.trim()) return;
+              // Step 2 only validated that the total reached 100, so the same
+              // criterion could be added twice (Collaboration at 10 + 10) and
+              // still pass. Judges then saw it twice on every scorecard.
+              const dupe = criteria.find(
+                (c: any) => c.name.trim().toLowerCase() === newCrit.name.trim().toLowerCase()
+              );
+              if (dupe) {
+                show(`"${dupe.name}" is already a criterion — edit or remove it instead`);
+                return;
+              }
               let tplId = template?.id;
               if (!tplId) {
                 const res = await run(CREATE_TEMPLATE, { input: { eventId, name: ef.name } });

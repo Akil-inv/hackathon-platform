@@ -387,21 +387,34 @@ export class OperationsService {
 
     if (a.eventId !== b.eventId) throw new BadRequestException('Sessions must be in the same event');
 
-    // Swap only the team assignments - judges stay in their rooms
-    // Use raw SQL to atomically swap team IDs (avoids unique constraint on team_id + time_slot_id)
-    await this.prisma.$executeRawUnsafe(
-      `UPDATE judging_sessions SET team_id = CASE id WHEN $1::uuid THEN $3::uuid WHEN $2::uuid THEN $4::uuid END WHERE id IN ($1::uuid, $2::uuid)`,
-      a.id, b.id, b.teamId, a.teamId
-    );
+    // Everything below runs in one transaction. The team swap used to happen
+    // outside it, so a failure here left teams swapped but scorecards stale.
     await this.prisma.$transaction(async (tx) => {
+      // Raw SQL swaps both team IDs in a single statement, avoiding the
+      // unique constraint on (team_id, time_slot_id) that a two-step update
+      // would trip.
+      await tx.$executeRawUnsafe(
+        `UPDATE judging_sessions SET team_id = CASE id WHEN $1::uuid THEN $3::uuid WHEN $2::uuid THEN $4::uuid END WHERE id IN ($1::uuid, $2::uuid)`,
+        a.id, b.id, b.teamId, a.teamId
+      );
 
-      // Delete non-submitted scorecards and create fresh ones for new team assignments
-      await tx.scorecard.deleteMany({
-        where: { sessionId: a.id, status: { in: ['NOT_STARTED', 'DRAFT'] } },
+      // Clear child criterion_scores before deleting the scorecards that own
+      // them. Without this, criterion_scores_scorecard_id_fkey rejects the
+      // delete and the whole swap fails — which it does as soon as a judge
+      // has typed anything into a draft.
+      const staleScorecards = await tx.scorecard.findMany({
+        where: {
+          sessionId: { in: [a.id, b.id] },
+          status: { in: ['NOT_STARTED', 'DRAFT'] },
+        },
+        select: { id: true },
       });
-      await tx.scorecard.deleteMany({
-        where: { sessionId: b.id, status: { in: ['NOT_STARTED', 'DRAFT'] } },
-      });
+      const staleIds = staleScorecards.map((sc) => sc.id);
+
+      if (staleIds.length > 0) {
+        await tx.criterionScore.deleteMany({ where: { scorecardId: { in: staleIds } } });
+        await tx.scorecard.deleteMany({ where: { id: { in: staleIds } } });
+      }
 
       // Create new scorecards for session A judges -> team B
       for (const sj of a.judges) {
