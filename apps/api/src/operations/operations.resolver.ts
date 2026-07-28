@@ -4,6 +4,7 @@ import {
   OperationResult, ReplacementJudge, SessionHealthCheck,
   SwapJudgeInput, ChangeRoomInput, RescheduleInput, MarkAbsentInput,
   AddJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput, SwapSessionsInput,
+  OutstandingScoring,
 } from './operations.types';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -82,5 +83,11 @@ export class OperationsResolver {
   @Query(() => [SessionHealthCheck])
   async sessionHealthCheck(@Args('eventId') eventId: string) {
     return this.service.healthCheck(eventId);
+  }
+
+  @Roles('ADMIN', 'COORDINATOR')
+  @Query(() => [OutstandingScoring])
+  async outstandingScoring(@Args('eventId') eventId: string) {
+    return this.service.outstandingScoring(eventId);
   }
 }

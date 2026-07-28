@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { JudgePortalService } from './judge-portal.service';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,7 +26,7 @@ export class JudgePortalController {
       where: { judgeId: judge.id, eventId },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
         session: { include: { room: true, timeSlot: true } },
       },
       orderBy: { session: { scheduledStart: 'asc' } },
@@ -39,9 +39,17 @@ export class JudgePortalController {
       include: { criteria: { orderBy: { displayOrder: 'asc' } } },
     });
     if (template) {
+      // Categories group the questions; they are not questions themselves.
+      // Creating a score row for one would ask a judge for the same points
+      // twice and put the total past 100.
+      const categoryIds = new Set(
+        template.criteria.map((c: any) => c.parentId).filter(Boolean) as string[],
+      );
+      const scoreableCriteria = template.criteria.filter((c: any) => !categoryIds.has(c.id));
+
       for (const sc of scorecards) {
         if (sc.criterionScores.length === 0) {
-          for (const c of template.criteria) {
+          for (const c of scoreableCriteria) {
             await this.prisma.criterionScore.upsert({
               where: { scorecardId_criterionId: { scorecardId: sc.id, criterionId: c.id } },
               create: { scorecardId: sc.id, criterionId: c.id },
@@ -51,7 +59,7 @@ export class JudgePortalController {
           // Re-fetch so the response includes the newly created scores
           const updated = await this.prisma.scorecard.findUnique({
             where: { id: sc.id },
-            include: { criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } } },
+            include: { criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } } },
           });
           if (updated) (sc as any).criterionScores = updated.criterionScores;
         }
@@ -94,6 +102,11 @@ export class JudgePortalController {
           guidanceText: cs.criterion?.guidanceText,
           requiresComment: cs.criterion?.requiresComment,
           scoringAnchors: cs.criterion?.scoringAnchors,
+          // Lets the portal group rows under their category and show a
+          // running subtotal per section.
+          parentId: (cs.criterion as any)?.parentId ?? null,
+          categoryName: (cs.criterion as any)?.parent?.name ?? null,
+          categoryMaxScore: (cs.criterion as any)?.parent?.maxScore ?? null,
           score: cs.score,
           comment: cs.comment,
         })),
@@ -122,31 +135,37 @@ export class JudgePortalController {
       where: { id: body.scorecardId },
       include: { session: true },
     });
-    if (!scorecard) throw new Error('Scorecard not found');
-    if (scorecard.judgeId !== judge.id) throw new Error('This scorecard does not belong to you');
+    if (!scorecard) throw new NotFoundException('Scorecard not found');
+    if (scorecard.judgeId !== judge.id) throw new ForbiddenException('This scorecard does not belong to you');
 
     // Check event not closed
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (event?.status === 'COMPLETED' || event?.status === 'ARCHIVED') {
-      throw new Error('Event is closed. No more scoring allowed.');
+      throw new BadRequestException('Event is closed. No more scoring allowed.');
     }
 
     // Check session stage
     const scoreableStages = ['SCORING', 'COMPLETED', 'QA', 'IN_PROGRESS'];
     if (!scoreableStages.includes(scorecard.session?.stage || '')) {
-      throw new Error(`Scoring not enabled. Session is ${scorecard.session?.stage}. Wait for organizer to start the session.`);
+      throw new BadRequestException(`Scoring not enabled. Session is ${scorecard.session?.stage}. Wait for organizer to start the session.`);
     }
 
     // Check scorecard is editable
     if (['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(scorecard.status)) {
-      throw new Error('Scorecard already submitted. Ask organizer to reopen if changes needed.');
+      throw new BadRequestException('Scorecard already submitted. Ask organizer to reopen if changes needed.');
     }
 
-    // Initialize criterion scores if needed
+    // Initialize criterion scores if needed — leaves only. A category's points
+    // are already represented by its rows.
     const template = await this.prisma.scoringTemplate.findFirst({ where: { eventId, status: 'ACTIVE' } });
+    const categoryIds = new Set<string>();
     if (template) {
       const criteria = await this.prisma.scoringCriterion.findMany({ where: { templateId: template.id } });
       for (const c of criteria) {
+        if ((c as any).parentId) categoryIds.add((c as any).parentId);
+      }
+      for (const c of criteria) {
+        if (categoryIds.has(c.id)) continue;
         await this.prisma.criterionScore.upsert({
           where: { scorecardId_criterionId: { scorecardId: scorecard.id, criterionId: c.id } },
           create: { scorecardId: scorecard.id, criterionId: c.id },
@@ -155,8 +174,11 @@ export class JudgePortalController {
       }
     }
 
-    // Save scores
-    for (const s of body.scores) {
+    // Save scores, dropping anything aimed at a category. A page loaded before
+    // the rubric became two-level would otherwise put those rows back.
+    const incoming = body.scores.filter(s => !categoryIds.has(s.criterionId));
+
+    for (const s of incoming) {
       await this.prisma.criterionScore.upsert({
         where: { scorecardId_criterionId: { scorecardId: scorecard.id, criterionId: s.criterionId } },
         create: { scorecardId: scorecard.id, criterionId: s.criterionId, score: s.score, comment: s.comment },
@@ -164,7 +186,7 @@ export class JudgePortalController {
       });
     }
 
-    const totalScore = body.scores.reduce((sum, s) => sum + s.score, 0);
+    const totalScore = incoming.reduce((sum, s) => sum + s.score, 0);
 
     if (body.submit) {
       // Validate all criteria scored
@@ -173,8 +195,9 @@ export class JudgePortalController {
         include: { criterion: true },
       });
       for (const cs of allScores) {
-        if (cs.score === null) throw new Error(`Score for "${cs.criterion.name}" is required`);
-        if (cs.criterion.requiresComment && !cs.comment?.trim()) throw new Error(`Comment for "${cs.criterion.name}" is required`);
+        if (categoryIds.has(cs.criterionId)) continue;
+        if (cs.score === null) throw new BadRequestException(`Score for "${cs.criterion.name}" is required`);
+        if (cs.criterion.requiresComment && !cs.comment?.trim()) throw new BadRequestException(`Comment for "${cs.criterion.name}" is required`);
       }
 
       await this.prisma.scorecard.update({

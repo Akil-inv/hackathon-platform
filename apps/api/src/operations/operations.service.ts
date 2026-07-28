@@ -576,6 +576,95 @@ export class OperationsService {
     return candidates.sort((a, b) => b.score - a.score);
   }
 
+  // ─── OUTSTANDING SCORING ───
+  /**
+   * Sessions that have finished but whose scorecards are not in, grouped by
+   * the judge who owes them.
+   *
+   * Grouped by judge rather than by session on purpose: one judge with six
+   * outstanding scorecards is one conversation, not six problems. Sorted by
+   * the oldest outstanding session so anything left over from yesterday
+   * surfaces above this morning's.
+   *
+   * There is no hard stop anywhere — a judge who does not finish on day one
+   * can finish on day two. This exists so a coordinator knows who to chase.
+   * The platform never contacts judges itself.
+   */
+  async outstandingScoring(eventId: string) {
+    const sessions = await this.prisma.judgingSession.findMany({
+      where: { eventId, stage: 'COMPLETED' },
+      include: {
+        team: true,
+        room: true,
+        timeSlot: true,
+        scorecards: { include: { judge: true } },
+      },
+    });
+
+    type Row = {
+      judgeId: string;
+      judgeName: string;
+      judgeEmail: string;
+      judgePhone: string | null;
+      notStarted: number;
+      inProgress: number;
+      oldestSessionAt: Date | null;
+      teams: string[];
+    };
+
+    const byJudge = new Map<string, Row>();
+
+    for (const s of sessions) {
+      for (const sc of s.scorecards) {
+        if (!['NOT_STARTED', 'DRAFT', 'REOPENED'].includes(sc.status)) continue;
+        if (!sc.judge) continue;
+
+        const row = byJudge.get(sc.judgeId) ?? {
+          judgeId: sc.judgeId,
+          judgeName: sc.judge.name,
+          judgeEmail: sc.judge.email,
+          judgePhone: sc.judge.phone ?? null,
+          notStarted: 0,
+          inProgress: 0,
+          oldestSessionAt: null,
+          teams: [],
+        };
+
+        // A judge who has saved a draft is mid-thought. One who has not opened
+        // the scorecard may not know they are expected to score at all — a
+        // different conversation.
+        if (sc.status === 'NOT_STARTED') row.notStarted += 1;
+        else row.inProgress += 1;
+
+        const startedAt = s.timeSlot?.startTime ?? s.scheduledStart ?? null;
+        if (startedAt && (!row.oldestSessionAt || startedAt < row.oldestSessionAt)) {
+          row.oldestSessionAt = startedAt;
+        }
+
+        row.teams.push(`${s.team.name} (${s.room?.name ?? 'room tbc'})`);
+        byJudge.set(sc.judgeId, row);
+      }
+    }
+
+    return [...byJudge.values()]
+      .sort((a, b) => {
+        const at = a.oldestSessionAt?.getTime() ?? 0;
+        const bt = b.oldestSessionAt?.getTime() ?? 0;
+        return at - bt;
+      })
+      .map((r) => ({
+        judgeId: r.judgeId,
+        judgeName: r.judgeName,
+        judgeEmail: r.judgeEmail,
+        judgePhone: r.judgePhone,
+        outstanding: r.notStarted + r.inProgress,
+        notStarted: r.notStarted,
+        inProgress: r.inProgress,
+        oldestSessionAt: r.oldestSessionAt ? r.oldestSessionAt.toISOString() : null,
+        teams: r.teams,
+      }));
+  }
+
   // ─── HEALTH CHECK ───
   async healthCheck(eventId: string) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });

@@ -52,46 +52,46 @@ export class AssignEventRoleInput {
 export class UsersResolver {
   constructor(private usersService: UsersService) {}
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Mutation(() => UserEntity)
   async createUser(@Args('input') input: CreateUserInput) {
     return this.usersService.createUser(input);
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Query(() => [UserEntity])
   async users() {
     return this.usersService.listUsers();
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Query(() => [EventUserEntity])
   async eventUsers(@Args('eventId') eventId: string) {
     return this.usersService.listEventUsers(eventId);
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Mutation(() => Boolean)
   async assignEventRole(@Args('input') input: AssignEventRoleInput) {
     await this.usersService.assignToEvent(input.userId, input.eventId, input.role);
     return true;
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Mutation(() => Boolean)
   async removeEventRole(@Args('userId') userId: string, @Args('eventId') eventId: string) {
     await this.usersService.removeFromEvent(userId, eventId);
     return true;
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Mutation(() => Boolean)
   async deleteUser(@Args('userId') userId: string) {
     await this.usersService.deleteUser(userId);
     return true;
   }
 
-  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Roles('SUPER_ADMIN')
   @Mutation(() => Boolean)
   async resetUserPassword(@Args('userId') userId: string, @Args('newPassword') newPassword: string) {
     await this.usersService.resetPassword(userId, newPassword);

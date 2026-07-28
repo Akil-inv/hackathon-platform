@@ -6,11 +6,12 @@ import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, ROOMS_QUERY, JUDGES_QUERY } from '@/lib/queries';
 import { useEventId, useEventStore } from '@/lib/event-store';
 import ReadinessPlanner from '@/components/readiness-planner';
+import CriteriaBuilder from '@/components/criteria-builder';
 
 const TRACKS_QUERY = `query T($eventId: String!) { tracks(eventId: $eventId) { id name description status } }`;
 const TIMESLOTS_QUERY = `query TS($eventId: String!) { timeSlots(eventId: $eventId) { id date startTime endTime slotType } }`;
 const ROUNDS_QUERY = `query RD($eventId: String!) { judgingRounds(eventId: $eventId) { id name roundNumber status allowedTiers teamCount advanceCount } }`;
-const SCORING_TEMPLATE_QUERY = `query ST($eventId: String!) { scoringTemplates(eventId: $eventId) { id name status criteria { id name maxScore description displayOrder requiresComment } } }`;
+const SCORING_TEMPLATE_QUERY = `query ST($eventId: String!) { scoringTemplates(eventId: $eventId) { id name status maxTotal criteria { id name maxScore description displayOrder requiresComment guidanceText parentId } } }`;
 const TEAMS_QUERY = `query TM($eventId: String!) { teams(eventId: $eventId) { id name projectName trackName status organisation techStack teamLeadEmail } }`;
 const CREATE_EVENT = `mutation CE($input: CreateEventInput!) { createEvent(input: $input) { id name status } }`;
 const UPDATE_EVENT = `mutation UE($id: String!, $input: UpdateEventInput!) { updateEvent(id: $id, input: $input) { id name status } }`;
@@ -22,6 +23,8 @@ const GEN_SLOTS = `mutation GS($input: GenerateTimeSlotsInput!) { generateTimeSl
 const CLEAR_SLOTS = `mutation CS($eventId: String!, $date: String!) { clearTimeSlots(eventId: $eventId, date: $date) }`;
 const CREATE_TEMPLATE = `mutation CST($input: CreateScoringTemplateInput!) { createScoringTemplate(input: $input) { id name status } }`;
 const ADD_CRITERION = `mutation AC($input: AddCriterionInput!) { addCriterion(input: $input) { id name maxScore } }`;
+const UPDATE_CRITERION = `mutation UC($id: String!, $input: UpdateCriterionInput!) { updateCriterion(id: $id, input: $input) { id name maxScore } }`;
+const LOAD_RUBRIC = `mutation LR($eventId: String!) { loadStandardRubric(eventId: $eventId) { categoriesCreated rowsCreated } }`;
 const DELETE_CRITERION = `mutation DC($id: String!) { removeCriterion(id: $id) }`;
 
 const TZ = 'Asia/Singapore';
@@ -107,13 +110,24 @@ export default function EventSetupPage() {
 
   // Derived data
   const criteria = template?.criteria || [];
-  const totalPoints = criteria.reduce((s: number, c: any) => s + (c.maxScore || 0), 0);
+  // totalPoints is computed below, over categories only.
   const eventDays = getEvDays(ef.startDate, ef.endDate);
   const judgingSlots = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length;
 
   // Step completion checks
   const s1 = !!event; // Event created (false while creatingNew, showing the create form)
-  const s2 = criteria.length > 0 && totalPoints === 100; // Scoring criteria set
+  // Step 2 is complete when the categories total 100 and each category's rows
+  // total that category's own max. A flat sum of 100 is not sufficient —
+  // five categories of 20 with no rows beneath them would pass while leaving
+  // judges nothing to score.
+  const categoryList = criteria.filter((c: any) => !c.parentId);
+  const totalPoints = categoryList.reduce((s: number, c: any) => s + (c.maxScore || 0), 0);
+  const everyCategoryBalances = categoryList.every((cat: any) => {
+    const rows = criteria.filter((c: any) => c.parentId === cat.id);
+    if (rows.length === 0) return false;
+    return rows.reduce((s: number, r: any) => s + r.maxScore, 0) === cat.maxScore;
+  });
+  const s2 = categoryList.length > 0 && totalPoints === 100 && everyCategoryBalances;
   const s3 = tracks.length > 0; // Tracks exist
   const s4 = teams.length > 0; // Teams uploaded
   const s5 = judges.length > 0; // Judges uploaded
@@ -332,68 +346,54 @@ export default function EventSetupPage() {
           {s2 && editingStep !== 2 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
         </div>
         <div style={stepStyle(2, s2, s1, editingStep === 2).body}>
-          {criteria.length > 0 && criteria.map((c: any, i: number) => (
-            <div className="item" key={c.id} style={{alignItems:'flex-start'}}>
-              <div style={{flex:1}}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span className="item-name">{c.name}</span>
-                  <span style={{fontSize:16,fontWeight:600,color:'#a78bfa'}}>{c.maxScore}</span>
-                  {c.requiresComment && <span style={{fontSize:10,color:'#f59e0b',padding:'1px 6px',borderRadius:3,background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)'}}>Comment required</span>}
-                </div>
-                {c.description && <div className="item-sub" style={{marginTop:2}}>{c.description}</div>}
-                <div style={{marginTop:6,height:6,borderRadius:3,background:'rgba(255,255,255,0.06)',overflow:'hidden',maxWidth:200}}>
-                  <div style={{height:'100%',borderRadius:3,background:'#7c3aed',width:`${totalPoints > 0 ? (c.maxScore/100)*100 : 0}%`}} />
-                </div>
-              </div>
-              <button className="btn btn-danger btn-sm" onClick={async () => {
-                if (!confirm(`Remove "${c.name}"?`)) return;
-                await run(DELETE_CRITERION, { id: c.id });
-                show(`"${c.name}" removed`); reload();
-              }}>Remove</button>
-            </div>
-          ))}
-          {totalPoints !== 100 && criteria.length > 0 && (
-            <div style={{padding:'8px 12px',borderRadius:8,background: totalPoints > 100 ? 'rgba(239,68,68,0.08)' : 'rgba(245,158,11,0.08)',border: `1px solid ${totalPoints > 100 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)'}`,marginBottom:8}}>
-              <span style={{fontSize:13,color: totalPoints > 100 ? '#f87171' : '#f59e0b'}}>Total is {totalPoints} — must equal 100</span>
-            </div>
-          )}
-          <div style={{padding:12,borderRadius:8,background:'rgba(255,255,255,0.02)',border:'0.5px solid rgba(255,255,255,0.06)',marginTop:8}}>
-            <div style={{fontSize:11,color:'#6b7a90',textTransform:'uppercase',letterSpacing:'0.08em',fontWeight:600,marginBottom:8}}>Add criterion</div>
-            <div className="fg">
-              <input className="inp" placeholder="Criterion name" value={newCrit.name} onChange={e => setNewCrit({...newCrit, name: e.target.value})} />
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <input type="number" className="inp" style={{width:70}} placeholder="Pts" value={newCrit.maxScore} onChange={e => setNewCrit({...newCrit, maxScore: Number(e.target.value)})} />
-                <label style={{display:'flex',alignItems:'center',gap:4,fontSize:12,color:'#94a3b8',cursor:'pointer',whiteSpace:'nowrap'}}>
-                  <input type="checkbox" checked={newCrit.requiresComment} onChange={e => setNewCrit({...newCrit, requiresComment: e.target.checked})} /> Comment req.
-                </label>
-              </div>
-            </div>
-            <input className="inp" placeholder="Description (optional)" value={newCrit.description} onChange={e => setNewCrit({...newCrit, description: e.target.value})} style={{marginTop:6}} />
-            <button className="btn btn-pri btn-sm" style={{marginTop:8}} onClick={async () => {
-              if (!newCrit.name.trim()) return;
-              // Step 2 only validated that the total reached 100, so the same
-              // criterion could be added twice (Collaboration at 10 + 10) and
-              // still pass. Judges then saw it twice on every scorecard.
-              const dupe = criteria.find(
-                (c: any) => c.name.trim().toLowerCase() === newCrit.name.trim().toLowerCase()
-              );
-              if (dupe) {
-                show(`"${dupe.name}" is already a criterion — edit or remove it instead`);
-                return;
+          <CriteriaBuilder
+            criteria={criteria}
+            maxTotal={100}
+            onLoadRubric={async () => {
+              const res = await run(LOAD_RUBRIC, { eventId });
+              if (res) {
+                const r = res.loadStandardRubric;
+                show(`Loaded ${r.categoriesCreated} categories and ${r.rowsCreated} rows`);
+                reload();
               }
+            }}
+            onAddCategory={async (name: string, maxScore: number) => {
               let tplId = template?.id;
               if (!tplId) {
                 const res = await run(CREATE_TEMPLATE, { input: { eventId, name: ef.name } });
                 if (!res) return;
                 tplId = res.createScoringTemplate.id;
               }
-              await run(ADD_CRITERION, { input: { templateId: tplId, name: newCrit.name.trim(), maxScore: newCrit.maxScore, description: newCrit.description || undefined, requiresComment: newCrit.requiresComment, weight: 1.0 } });
-              show(`"${newCrit.name}" added`);
-              setNewCrit({ name: '', maxScore: 10, description: '', requiresComment: false });
+              const res = await run(ADD_CRITERION, {
+                input: { templateId: tplId, name, maxScore, weight: 1.0 },
+              });
+              if (res) { show(`"${name}" added`); reload(); }
+            }}
+            onAddRow={async (parentId: string, name: string, maxScore: number, guidanceText: string, requiresComment: boolean) => {
+              const res = await run(ADD_CRITERION, {
+                input: {
+                  templateId: template?.id,
+                  parentId,
+                  name,
+                  maxScore,
+                  guidanceText: guidanceText || undefined,
+                  requiresComment,
+                  weight: 1.0,
+                },
+              });
+              if (res) { show(`"${name}" added`); reload(); }
+            }}
+            onUpdate={async (id: string, changes: any) => {
+              const res = await run(UPDATE_CRITERION, { id, input: changes });
+              if (res) { show('Updated'); reload(); }
+            }}
+            onRemove={async (id: string, name: string) => {
+              if (!confirm(`Remove "${name}"? Any rows beneath it go too.`)) return;
+              await run(DELETE_CRITERION, { id });
+              show(`"${name}" removed`);
               reload();
-            }}>Add</button>
-          </div>
-          {criteria.length === 0 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Add criteria totaling 100 points. Common: Innovation (20), Business Impact (40), Feasibility (10), Collaboration (20), Bonus (10)</div>}
+            }}
+          />
         </div>
       </div>
 

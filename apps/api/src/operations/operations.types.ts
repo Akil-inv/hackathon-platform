@@ -94,3 +94,16 @@ export class SwapSessionsInput {
   @Field() sessionIdA!: string;
   @Field() sessionIdB!: string;
 }
+
+@ObjectType()
+export class OutstandingScoring {
+  @Field() judgeId!: string;
+  @Field() judgeName!: string;
+  @Field() judgeEmail!: string;
+  @Field({ nullable: true }) judgePhone?: string;
+  @Field(() => Int) outstanding!: number;
+  @Field(() => Int) notStarted!: number;
+  @Field(() => Int) inProgress!: number;
+  @Field({ nullable: true }) oldestSessionAt?: string;
+  @Field(() => [String]) teams!: string[];
+}

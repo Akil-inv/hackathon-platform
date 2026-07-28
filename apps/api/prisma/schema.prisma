@@ -382,6 +382,13 @@ model ScoringTemplate {
 }
 
 model ScoringCriterion {
+  // Two-level structure: a criterion with no parent is a category, one with a
+  // parent is a scoring row beneath it. Depth is enforced at two in the
+  // service — a parent may not itself have a parent.
+  parentId     String?             @map("parent_id") @db.Uuid
+  parent       ScoringCriterion?   @relation("CriterionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children     ScoringCriterion[]  @relation("CriterionTree")
+
   id              String   @id @default(uuid()) @db.Uuid
   templateId      String   @map("template_id") @db.Uuid
   name            String

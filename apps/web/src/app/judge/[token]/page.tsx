@@ -173,12 +173,49 @@ export default function JudgePortalPage() {
             )}
 
             <div className="space-y-4">
-              {activeScorecard.criterionScores?.map((cs: any) => {
+              {(() => {
+                // Categories group the questions; they are not questions
+                // themselves. Filtering them here means a scorecard created
+                // before the rubric became two-level cannot show one as
+                // scoreable.
+                const rows = (activeScorecard.criterionScores || []).filter(
+                  (cs: any) => !!cs.parentId,
+                );
+
+                // Running subtotal per category, so a judge can see how much
+                // of each section is used without adding it up themselves.
+                const subtotals: Record<string, number> = {};
+                for (const cs of rows) {
+                  if (!cs.parentId) continue;
+                  subtotals[cs.parentId] =
+                    (subtotals[cs.parentId] || 0) + (scores[cs.criterionId]?.score || 0);
+                }
+
+                let lastCategory: string | null = null;
+
+                return rows.map((cs: any) => {
+                const showHeader = !!cs.parentId && cs.parentId !== lastCategory;
+                if (cs.parentId) lastCategory = cs.parentId;
+                const catUsed = cs.parentId ? subtotals[cs.parentId] || 0 : 0;
+                const catDone = cs.categoryMaxScore ? catUsed === cs.categoryMaxScore : false;
+
                 const s = scores[cs.criterionId] || { score: null, comment: '' };
                 const isLocked = ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status);
+                const commentMissing = cs.requiresComment && !(s.comment || '').trim();
 
                 return (
-                  <div key={cs.criterionId} className="rounded-xl border border-[#1e293b] bg-[#0a0e1a] p-4">
+                  <div key={cs.criterionId}>
+                  {showHeader && (
+                    <div className="flex items-baseline justify-between px-1 pb-2 pt-3">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[#7c3aed]">
+                        {cs.categoryName}
+                      </span>
+                      <span className={`text-xs ${catDone ? 'text-green-400' : 'text-gray-500'}`}>
+                        {catUsed} / {cs.categoryMaxScore}
+                      </span>
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-[#1e293b] bg-[#0a0e1a] p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <span className="text-sm font-semibold text-white">{cs.criterionName}</span>
@@ -220,21 +257,31 @@ export default function JudgePortalPage() {
 
                     <textarea value={s.comment || ''} disabled={isLocked}
                       onChange={(e) => setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], comment: e.target.value } }))}
-                      placeholder={cs.requiresComment ? 'Comment required...' : 'Optional comment...'}
-                      rows={2} className="w-full bg-[#0a0e1a] border border-[#334155] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none resize-none disabled:opacity-50" />
+                      placeholder={cs.requiresComment ? 'Why this score? Required.' : 'Optional comment...'}
+                      rows={2}
+                      className={`w-full bg-[#111827] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none resize-none disabled:opacity-50 border ${
+                        commentMissing ? 'border-yellow-500/50' : 'border-[#475569]'
+                      } focus:border-[#7c3aed]`} />
+                    {commentMissing && (
+                      <p className="mt-1.5 text-xs text-yellow-400">
+                        A comment is required before this scorecard can be submitted.
+                      </p>
+                    )}
+                  </div>
                   </div>
                 );
-              })}
+                });
+              })()}
 
               {/* Overall assessment */}
               <div className="rounded-xl border border-[#1e293b] bg-[#0a0e1a] p-4 space-y-3">
                 <h3 className="text-sm font-semibold text-white">Overall assessment</h3>
                 <textarea value={strengths} onChange={(e) => setStrengths(e.target.value)} placeholder="Strengths..." rows={2}
                   disabled={['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status)}
-                  className="w-full bg-[#0a0e1a] border border-[#334155] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none resize-none disabled:opacity-50" />
+                  className="w-full bg-[#111827] border border-[#475569] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none resize-none disabled:opacity-50 focus:border-[#7c3aed]" />
                 <textarea value={improvements} onChange={(e) => setImprovements(e.target.value)} placeholder="Areas for improvement..." rows={2}
                   disabled={['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status)}
-                  className="w-full bg-[#0a0e1a] border border-[#334155] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none resize-none disabled:opacity-50" />
+                  className="w-full bg-[#111827] border border-[#475569] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none resize-none disabled:opacity-50 focus:border-[#7c3aed]" />
               </div>
             </div>
 

@@ -1,15 +1,33 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, ScorecardStatus } from '@prisma/client';
 import { SaveScorecardInput, SubmitScorecardInput } from './scorecards.types';
+import { RankingsService } from '../rankings/rankings.service';
 
 @Injectable()
 export class ScorecardsService {
+  private readonly logger = new Logger(ScorecardsService.name);
+
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
+    private rankings: RankingsService,
   ) {}
+
+  /**
+   * Recompute standings after a scorecard lands.
+   *
+   * Deliberately not awaited by the caller and deliberately swallowing its own
+   * errors: a judge submitting a scorecard should never see a failure because
+   * a downstream ranking calculation had a problem. Results stay PROVISIONAL —
+   * approving and publishing are still explicit admin actions.
+   */
+  private recalculateRankings(eventId: string, userId: string) {
+    this.rankings.calculateRankings(eventId, null, userId).catch((err) => {
+      this.logger.warn(`Ranking recalculation failed for event ${eventId}: ${err?.message}`);
+    });
+  }
 
   private enrichScorecard(sc: any) {
     return {
@@ -24,6 +42,11 @@ export class ScorecardsService {
         maxScore: cs.criterion?.maxScore || 0,
         guidanceText: cs.criterion?.guidanceText || null,
         requiresComment: cs.criterion?.requiresComment || false,
+        // Lets the judge portal group rows under their category and show a
+        // running subtotal per section.
+        parentId: cs.criterion?.parentId || null,
+        categoryName: cs.criterion?.parent?.name || null,
+        categoryMaxScore: cs.criterion?.parent?.maxScore || null,
         score: cs.score,
         comment: cs.comment,
       })),
@@ -54,7 +77,7 @@ export class ScorecardsService {
       where: { judgeId, eventId },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
         session: { include: { room: true, timeSlot: true } },
       },
       orderBy: { session: { scheduledStart: 'asc' } },
@@ -67,7 +90,7 @@ export class ScorecardsService {
       where: { teamId },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
     return scorecards.map(sc => this.enrichScorecard(sc));
@@ -78,7 +101,7 @@ export class ScorecardsService {
       where: { id },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
     if (!sc) throw new NotFoundException('Scorecard not found');
@@ -90,7 +113,7 @@ export class ScorecardsService {
       where: { eventId },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -103,7 +126,7 @@ export class ScorecardsService {
       where: { judgeId, eventId },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
         session: { include: { room: true, timeSlot: true } },
       },
       orderBy: { session: { scheduledStart: 'asc' } },
@@ -127,10 +150,18 @@ export class ScorecardsService {
   }
 
   async initializeCriterionScores(scorecardId: string, templateId: string) {
-    const criteria = await this.prisma.scoringCriterion.findMany({
+    const all = await this.prisma.scoringCriterion.findMany({
       where: { templateId },
       orderBy: { displayOrder: 'asc' },
     });
+
+    // Only leaves are scored. A criterion with children is a category — a
+    // grouping for display and roll-up, not a question a judge answers.
+    // Scoring both would ask for the same points twice and make 100
+    // unreachable.
+    const parentIds = new Set(all.map((c: any) => c.parentId).filter(Boolean));
+    const criteria = all.filter((c: any) => !parentIds.has(c.id));
+
     for (const c of criteria) {
       await this.prisma.criterionScore.upsert({
         where: { scorecardId_criterionId: { scorecardId, criterionId: c.id } },
@@ -159,7 +190,24 @@ export class ScorecardsService {
     });
     if (template) await this.initializeCriterionScores(sc.id, template.id);
 
-    for (const s of input.scores) {
+    // Categories are groupings, not questions. A client that renders one as a
+    // slider — a stale page, or a replayed request — would otherwise write a
+    // score against it and push the total past the maximum, because the
+    // category's points are already represented by its rows.
+    //
+    // Dropped silently rather than rejected: a judge mid-session should not
+    // hit an error because their page is a version behind.
+    const allCriteria = await this.prisma.scoringCriterion.findMany({
+      where: { templateId: template?.id ?? '' },
+      select: { id: true, parentId: true },
+    });
+    const categoryIds = new Set(
+      allCriteria.map((c: any) => c.parentId).filter(Boolean) as string[],
+    );
+
+    const scores = input.scores.filter(s => !categoryIds.has(s.criterionId));
+
+    for (const s of scores) {
       await this.prisma.criterionScore.upsert({
         where: { scorecardId_criterionId: { scorecardId: sc.id, criterionId: s.criterionId } },
         create: { scorecardId: sc.id, criterionId: s.criterionId, score: s.score, comment: s.comment },
@@ -167,7 +215,7 @@ export class ScorecardsService {
       });
     }
 
-    const totalScore = input.scores.reduce((sum, s) => sum + s.score, 0);
+    const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
     const newStatus = sc.status === 'NOT_STARTED' ? 'DRAFT' : sc.status === 'REOPENED' ? 'REOPENED' : 'DRAFT';
 
     const updated = await this.prisma.scorecard.update({
@@ -181,7 +229,7 @@ export class ScorecardsService {
       },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
 
@@ -226,7 +274,7 @@ export class ScorecardsService {
       data: { status: newStatus as ScorecardStatus, totalScore, conflictConfirmed: true, submittedAt: new Date() },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
 
@@ -235,6 +283,8 @@ export class ScorecardsService {
       action: AuditAction.UPDATE, entityType: 'Scorecard', entityId: sc.id,
       oldValues: { status: sc.status }, newValues: { status: newStatus, totalScore },
     });
+
+    this.recalculateRankings(sc.eventId, userId);
 
     return this.enrichScorecard(updated);
   }
@@ -251,7 +301,7 @@ export class ScorecardsService {
       data: { status: 'REOPENED', reopenReason: reason },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
 
@@ -260,6 +310,8 @@ export class ScorecardsService {
       action: AuditAction.UPDATE, entityType: 'Scorecard', entityId: scorecardId,
       oldValues: { status: sc.status }, newValues: { status: 'REOPENED', reason },
     });
+
+    this.recalculateRankings(sc.eventId, userId);
 
     return this.enrichScorecard(updated);
   }
@@ -270,7 +322,7 @@ export class ScorecardsService {
       data: { status: 'LOCKED', lockedAt: new Date() },
       include: {
         judge: true, team: true,
-        criterionScores: { include: { criterion: true }, orderBy: { criterion: { displayOrder: 'asc' } } },
+        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
       },
     });
     return this.enrichScorecard(updated);

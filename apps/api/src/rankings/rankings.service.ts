@@ -57,7 +57,10 @@ export class RankingsService {
       throw new BadRequestException('No scoring template found for this event');
     }
 
-    const criteria = template.criteria;
+    // Categories carry no scores of their own — including them would add a run
+    // of zeroes to every team's criterion breakdown.
+    const parentIds = new Set(template.criteria.map((c: any) => c.parentId).filter(Boolean));
+    const criteria = template.criteria.filter((c: any) => !parentIds.has(c.id));
 
     // Get teams
     const teamWhere: any = { eventId, deletedAt: null };
@@ -290,7 +293,9 @@ export class RankingsService {
       where: { eventId },
       include: { criteria: { orderBy: { displayOrder: 'asc' } } },
     });
-    const criteria = template?.criteria || [];
+    const allCriteria = template?.criteria || [];
+    const getParentIds = new Set(allCriteria.map((c: any) => c.parentId).filter(Boolean));
+    const criteria = allCriteria.filter((c: any) => !getParentIds.has(c.id));
 
     const teamIds = rankings.map(r => r.teamId);
 

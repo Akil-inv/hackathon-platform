@@ -7,6 +7,7 @@ input AddCriterionInput {
   guidanceText: String
   maxScore: Int!
   name: String!
+  parentId: String
   requiresComment: Boolean! = false
   scoreIncrement: Float! = 1
   scoringAnchors: JSON
@@ -335,6 +336,12 @@ type JudgingRoundType {
   teamCount: Int
 }
 
+type LoadRubricResult {
+  categoriesCreated: Int!
+  rowsCreated: Int!
+  templateId: String!
+}
+
 input LoginInput {
   email: String!
   password: String!
@@ -376,6 +383,7 @@ type Mutation {
   deleteUser(userId: String!): Boolean!
   generateSchedule(input: GenerateScheduleInput!): ScheduleResult!
   generateTimeSlots(input: GenerateTimeSlotsInput!): [TimeSlotEntity!]!
+  loadStandardRubric(eventId: String!): LoadRubricResult!
   lockScorecard(scorecardId: String!): ScorecardEntity!
   login(input: LoginInput!): LoginResponse!
   markJudgeAbsent(input: MarkAbsentInput!): OperationResult!
@@ -422,6 +430,18 @@ type OperationResult {
   warnings: [String!]!
 }
 
+type OutstandingScoring {
+  inProgress: Int!
+  judgeEmail: String!
+  judgeId: String!
+  judgeName: String!
+  judgePhone: String
+  notStarted: Int!
+  oldestSessionAt: String
+  outstanding: Int!
+  teams: [String!]!
+}
+
 enum PresentationMode {
   IN_PERSON
   VIRTUAL
@@ -444,6 +464,7 @@ type Query {
   judgingRounds(eventId: String!): [JudgingRoundType!]!
   me: UserResponse!
   myEvents: [MyEvent!]!
+  outstandingScoring(eventId: String!): [OutstandingScoring!]!
   rankings(eventId: String!, trackId: String): RankingOutput
   room(id: String!): RoomEntity!
   rooms(eventId: String!): [RoomEntity!]!
@@ -597,12 +618,14 @@ enum ScorecardStatus {
 }
 
 type ScoringCriterionEntity {
+  childrenTotal: Int!
   description: String
   displayOrder: Int!
   guidanceText: String
   id: String!
   maxScore: Int!
   name: String!
+  parentId: String
   requiresComment: Boolean!
   scoreIncrement: Float!
   scoringAnchors: JSON
@@ -830,6 +853,7 @@ input UpdateCriterionInput {
   guidanceText: String
   maxScore: Int
   name: String
+  parentId: String
   requiresComment: Boolean
   scoreIncrement: Float
   scoringAnchors: JSON

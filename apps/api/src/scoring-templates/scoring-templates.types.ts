@@ -17,6 +17,10 @@ export class ScoringCriterionEntity {
   @Field(() => GraphQLJSON, { nullable: true }) scoringAnchors?: any;
   @Field() requiresComment!: boolean;
   @Field(() => Float) scoreIncrement!: number;
+  /** Null for a category, set for a scoring row. */
+  @Field({ nullable: true }) parentId?: string;
+  /** Sum of this category's rows. Zero for a row. */
+  @Field(() => Int) childrenTotal!: number;
 }
 
 @ObjectType()
@@ -49,6 +53,8 @@ export class UpdateScoringTemplateInput {
 @InputType()
 export class AddCriterionInput {
   @Field() templateId!: string;
+  /** Omit to create a category, set to add a row beneath one. */
+  @Field({ nullable: true }) parentId?: string;
   @Field() name!: string;
   @Field({ nullable: true }) description?: string;
   @Field(() => Int) maxScore!: number;
@@ -61,6 +67,8 @@ export class AddCriterionInput {
 
 @InputType()
 export class UpdateCriterionInput {
+  /** Set to move a row to a different category. */
+  @Field({ nullable: true }) parentId?: string;
   @Field({ nullable: true }) name?: string;
   @Field({ nullable: true }) description?: string;
   @Field(() => Int, { nullable: true }) maxScore?: number;
@@ -75,4 +83,11 @@ export class UpdateCriterionInput {
 export class ReorderCriterionInput {
   @Field() id!: string;
   @Field(() => Int) displayOrder!: number;
+}
+
+@ObjectType()
+export class LoadRubricResult {
+  @Field() templateId!: string;
+  @Field(() => Int) categoriesCreated!: number;
+  @Field(() => Int) rowsCreated!: number;
 }

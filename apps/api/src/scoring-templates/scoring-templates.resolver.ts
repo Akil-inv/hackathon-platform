@@ -4,6 +4,7 @@ import {
   ScoringTemplateEntity, ScoringCriterionEntity,
   CreateScoringTemplateInput, UpdateScoringTemplateInput,
   AddCriterionInput, UpdateCriterionInput, ReorderCriterionInput,
+  LoadRubricResult,
 } from './scoring-templates.types';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -39,6 +40,15 @@ export class ScoringTemplatesResolver {
   @Query(() => [ScoringTemplateEntity])
   async scoringTemplates(@Args('eventId') eventId: string) {
     return this.service.findByEvent(eventId);
+  }
+
+  @Roles('SUPER_ADMIN', 'ADMIN')
+  @Mutation(() => LoadRubricResult)
+  async loadStandardRubric(
+    @Args('eventId') eventId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.loadStandardRubric(eventId, user.sub);
   }
 
   @Roles('ADMIN')
