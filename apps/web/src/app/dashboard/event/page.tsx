@@ -61,7 +61,7 @@ export default function EventSetupPage() {
 
   // Event creation form
   const [ef, setEf] = useState({ name: 'UOB Innovation Challenge 2026', description: 'Annual innovation hackathon. Top 10 advance to Finals.', location: 'UOB Plaza, Level 5 Auditorium', timezone: 'Asia/Singapore', startDate: '', endDate: '', sessionDurationMinutes: 20, minJudgesPerTeam: 3, maxJudgesPerTeam: 5 });
-  const [newRoom, setNewRoom] = useState({ name: '', capacity: 25 });
+  const [newRoom, setNewRoom] = useState({ name: '', capacity: 25, hasVideoConferencing: false });
   const [newTrack, setNewTrack] = useState({ name: '', description: '' });
   const [slotCfg, setSlotCfg] = useState({ startTime: '09:00', endTime: '17:00', lunchStart: '12:00', lunchEnd: '13:00', session: 20, brk: 5 });
 
@@ -475,7 +475,7 @@ export default function EventSetupPage() {
             {teams.length > 0 ? 'Upload more' : 'Upload teams CSV'}
             <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('teams', e.target.files[0]); }} />
           </label>
-          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary</span>
+          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary, country (TH SG MY ID VN HK CN)</span>
         </div>
         {!s3 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load teams. Track names must match the tracks above.</div>}
 
@@ -528,7 +528,7 @@ export default function EventSetupPage() {
             {judges.length > 0 ? 'Upload more' : 'Upload judges CSV'}
             <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('judges', e.target.files[0]); }} />
           </label>
-          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, phone, judge_type, judge_tier, organisation, max_sessions</span>
+          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, phone, judge_type, judge_tier, organisation, max_sessions, standby</span>
         </div>
         {!s4 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load judges.</div>}
       </div>
@@ -567,7 +567,10 @@ export default function EventSetupPage() {
           <div className="item" key={r.id}>
             <span className="item-name">{r.name}</span>
             <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <span className="item-sub">Cap: {r.capacity || 25}</span>
+              <span className="item-sub">
+                Cap: {r.capacity || 25}
+                {r.hasVideoConferencing && <span style={{marginLeft:8,color:'#38bdf8'}}>VC</span>}
+              </span>
               <button className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Remove "${r.name}"?`)) return; await run(DELETE_ROOM, { id: r.id }); show(`"${r.name}" removed`); reload(); }}>Remove</button>
             </div>
           </div>
@@ -575,10 +578,15 @@ export default function EventSetupPage() {
         <div className="add-row" key="room-add-form">
           <input className="inp" placeholder="Room name" value={newRoom.name} onChange={e => setNewRoom({...newRoom, name: e.target.value})} style={{flex:1}} onKeyDown={e => { if (e.key === 'Enter') { /* add */ } }} />
           <input type="number" className="inp" style={{width:70}} placeholder="Cap" value={newRoom.capacity} onChange={e => setNewRoom({...newRoom, capacity: Number(e.target.value)})} />
+          <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'#94a3b8',cursor:'pointer',whiteSpace:'nowrap'}}>
+            <input type="checkbox" checked={!!newRoom.hasVideoConferencing}
+              onChange={e => setNewRoom({...newRoom, hasVideoConferencing: e.target.checked})} />
+            Video conferencing
+          </label>
           <button className="btn btn-pri btn-sm" onClick={async () => {
             if (!newRoom.name.trim()) return;
-            await run(CREATE_ROOM, { input: { eventId, name: newRoom.name.trim(), capacity: newRoom.capacity } });
-            show(`"${newRoom.name}" added`); setNewRoom({ name: '', capacity: 25 }); reload();
+            await run(CREATE_ROOM, { input: { eventId, name: newRoom.name.trim(), capacity: newRoom.capacity, hasVideoConferencing: !!newRoom.hasVideoConferencing } });
+            show(`"${newRoom.name}" added`); setNewRoom({ name: '', capacity: 25, hasVideoConferencing: false }); reload();
           }}>Add</button>
         </div>
         {!s6 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Add at least one room</div>}

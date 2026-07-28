@@ -4,6 +4,9 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
 import { CreateTeamInput, UpdateTeamInput } from './teams.types';
 
+/** Countries taking part. Anything else is rejected at import. */
+const VALID_COUNTRIES = ['TH', 'SG', 'MY', 'ID', 'VN', 'HK', 'CN'];
+
 @Injectable()
 export class TeamsService {
   constructor(
@@ -112,6 +115,22 @@ export class TeamsService {
       const teamName = row.team_name.trim();
       const trackName = row.track_name?.trim();
 
+      // Almost every two-letter typo is a valid country somewhere, so an
+      // unchecked code would render the wrong flag rather than no flag.
+      let countryCode: string | null = null;
+      const rawCountry = row.country?.trim().toUpperCase();
+      if (rawCountry) {
+        if (!VALID_COUNTRIES.includes(rawCountry)) {
+          errors.push({
+            row: rowNum,
+            field: 'country',
+            message: `"${row.country}" is not a recognised code. Use one of: ${VALID_COUNTRIES.join(', ')}`,
+          });
+          continue;
+        }
+        countryCode = rawCountry;
+      }
+
       // Check duplicate
       if (existingNames.has(teamName.toLowerCase())) {
         errors.push({ row: rowNum, field: 'team_name', message: `"${teamName}" already exists` });
@@ -141,7 +160,7 @@ export class TeamsService {
             teamLeadName: row.team_lead_name?.trim() || teamName,
             teamLeadEmail: row.team_lead_email.trim(),
             organisation: row.organisation?.trim() || null,
-            country: row.country?.trim() || null,
+            country: countryCode,
             techStack: row.tech_stack?.trim() || null,
           },
         });

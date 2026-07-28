@@ -23,7 +23,7 @@ export const JUDGES_QUERY = `
 `;
 
 export const TRACKS_QUERY = `query Tracks($eventId: String!) { tracks(eventId: $eventId) { id name description displayOrder status teamCount } }`;
-export const ROOMS_QUERY = `query Rooms($eventId: String!) { rooms(eventId: $eventId) { id name capacity locationDescription isVirtual status } }`;
+export const ROOMS_QUERY = `query Rooms($eventId: String!) { rooms(eventId: $eventId) { id name capacity locationDescription isVirtual hasVideoConferencing status } }`;
 export const TIMESLOTS_QUERY = `query TimeSlots($eventId: String!) { timeSlots(eventId: $eventId) { id date startTime endTime slotType } }`;
 export const CONFLICTS_QUERY = `query Conflicts($eventId: String!) { conflicts(eventId: $eventId) { id judgeId judgeName teamId teamName reason source status createdAt } }`;
 

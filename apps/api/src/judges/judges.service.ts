@@ -197,6 +197,9 @@ export class JudgesService {
             maxSessions: parseInt(row.max_sessions) || 10,
             judgeTier: (row.judge_tier || "L1").trim().toUpperCase() as any,
             phone: row.phone?.trim() || null,
+            isStandby: ['true', 'yes', '1', 'y'].includes(
+              (row.standby || '').trim().toLowerCase(),
+            ),
           },
         });
         existingEmails.add(email);

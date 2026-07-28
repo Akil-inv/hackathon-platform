@@ -12,6 +12,7 @@ export class RoomEntity {
   @Field(() => Int, { nullable: true }) capacity?: number;
   @Field({ nullable: true }) locationDescription?: string;
   @Field() isVirtual!: boolean;
+  @Field() hasVideoConferencing!: boolean;
   @Field(() => RoomStatus) status!: RoomStatus;
   @Field() createdAt!: Date;
 }
@@ -23,6 +24,7 @@ export class CreateRoomInput {
   @Field(() => Int, { nullable: true }) capacity?: number;
   @Field({ nullable: true }) locationDescription?: string;
   @Field({ defaultValue: false }) isVirtual!: boolean;
+  @Field({ defaultValue: false }) hasVideoConferencing!: boolean;
 }
 
 @InputType()
@@ -31,6 +33,7 @@ export class UpdateRoomInput {
   @Field(() => Int, { nullable: true }) capacity?: number;
   @Field({ nullable: true }) locationDescription?: string;
   @Field({ nullable: true }) isVirtual?: boolean;
+  @Field({ nullable: true }) hasVideoConferencing?: boolean;
   @Field(() => RoomStatus, { nullable: true }) status?: RoomStatus;
 }
 

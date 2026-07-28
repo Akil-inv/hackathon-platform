@@ -123,6 +123,7 @@ input CreateJudgeInput {
 input CreateRoomInput {
   capacity: Int
   eventId: String!
+  hasVideoConferencing: Boolean! = false
   isVirtual: Boolean! = false
   locationDescription: String
   name: String!
@@ -552,6 +553,7 @@ type RoomEntity {
   capacity: Int
   createdAt: DateTime!
   eventId: String!
+  hasVideoConferencing: Boolean!
   id: String!
   isVirtual: Boolean!
   locationDescription: String
@@ -892,6 +894,7 @@ input UpdateJudgeInput {
 
 input UpdateRoomInput {
   capacity: Int
+  hasVideoConferencing: Boolean
   isVirtual: Boolean
   locationDescription: String
   name: String

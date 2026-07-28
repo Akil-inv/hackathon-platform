@@ -132,6 +132,9 @@ model Room {
   capacity            Int?
   locationDescription String?    @map("location_description")
   isVirtual           Boolean    @default(false) @map("is_virtual")
+  // Distinct from isVirtual: a physical room that has video conferencing
+  // equipment. Teams outside SG present remotely and need one of these.
+  hasVideoConferencing Boolean   @default(false) @map("has_video_conferencing")
   status              RoomStatus @default(ACTIVE)
   createdAt           DateTime   @default(now()) @map("created_at")
   updatedAt           DateTime   @updatedAt @map("updated_at")
@@ -272,6 +275,9 @@ model Judge {
   judgeType            JudgeType   @map("judge_type")
   judgeTier             JudgeTier   @default(L1) @map("judge_tier")
   maxSessions          Int         @default(10) @map("max_sessions")
+  // Has agreed to be interrupted and step in at short notice. Still scheduled
+  // normally — this marks availability for a swap, not reserve status.
+  isStandby            Boolean     @default(false) @map("is_standby")
   isPanelChairEligible Boolean     @default(false) @map("is_panel_chair_eligible")
   status               JudgeStatus @default(ACTIVE)
   createdAt            DateTime    @default(now()) @map("created_at")
