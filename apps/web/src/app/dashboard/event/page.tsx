@@ -127,10 +127,10 @@ export default function EventSetupPage() {
   const totalJudgeCapacity = judges.reduce((s: number, j: any) => s + (j.maxSessions || 4), 0);
   const judgeSessionsNeeded = teams.length * minJudges;
   const sessionDuration = ef.sessionDurationMinutes || 20;
-  const slotsPerRoom = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length / Math.max(rooms.length, 1);
+  const slotsPerRoom = judgingSlots;
   // Number of days the event runs, used to turn total slots into slots/day.
   const evDayCount = Math.max(getEvDays(ef.startDate, ef.endDate).length, 1);
-  const roomSessionCapacity = rooms.length * slotsPerRoom;
+  const roomSessionCapacity = judgingSlots * Math.max(rooms.length, 1);
 
   const capacityWarnings: string[] = [];
   if (allReady) {
@@ -141,7 +141,7 @@ export default function EventSetupPage() {
     }
     if (roomSessionCapacity < teams.length) {
       capacityWarnings.push(
-        `Room/slot shortage: ${rooms.length} rooms × ~${Math.round(slotsPerRoom)} slots = ${Math.round(roomSessionCapacity)} session slots, but ${teams.length} teams need scheduling. Add more rooms or time slots.`
+        `Room/slot shortage: ${rooms.length} rooms × ${judgingSlots} time slots = ${roomSessionCapacity} session slots, but ${teams.length} teams need scheduling. Add more rooms or time slots.`
       );
     }
     if (judges.length < minJudges) {
