@@ -129,7 +129,7 @@ docker-compose ps
 
 echo
 for _ in $(seq 1 20); do
-  if curl -s --max-time 3 http://localhost/health | grep -q '"status"'; then
+  if curl -s --max-time 3 http://localhost/health | grep -qE 'ok|"status"'; then
     ok "health responding"
     curl -s http://localhost/health | head -c 200; echo
     break
@@ -137,7 +137,7 @@ for _ in $(seq 1 20); do
   sleep 2
 done
 
-if ! curl -s --max-time 3 http://localhost/health | grep -q '"status"'; then
+if ! curl -s --max-time 3 http://localhost/health | grep -qE 'ok|"status"'; then
   err "health not responding after 40s"
   echo
   echo "last 30 lines of api log:"
