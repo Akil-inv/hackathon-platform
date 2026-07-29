@@ -198,7 +198,7 @@ export default function QuadrantView({
       <button
         onClick={() => open(kind)}
         style={cardStyle(f)}
-        className="group flex h-full flex-col rounded-2xl p-4 sm:p-5 min-h-[132px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
+        className="group flex h-full flex-col rounded-2xl p-5 min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
       >
         <div className="flex items-start gap-3.5">
           <span
@@ -210,12 +210,12 @@ export default function QuadrantView({
             </span>
           </span>
           <div className="flex-1 min-w-0">
-            <p style={{ color: f.ink }} className="text-base font-semibold tracking-wide whitespace-nowrap">{title}</p>
-            <p style={{ color: f.dim }} className="text-sm truncate">{subtitle}</p>
+            <p style={{ color: f.ink }} className="text-base font-semibold tracking-wide">{title}</p>
+            <p style={{ color: f.dim }} className="text-sm">{subtitle}</p>
           </div>
-          <div className="text-right shrink-0 pl-2">
-            <p style={{ color: f.ink }} className="text-3xl sm:text-4xl font-semibold leading-none tabular-nums">{count}</p>
-            <p style={{ color: f.dim }} className="text-xs mt-1 whitespace-nowrap">{unit}</p>
+          <div className="text-right shrink-0">
+            <p style={{ color: f.ink }} className="text-4xl font-semibold leading-none tabular-nums">{count}</p>
+            <p style={{ color: f.dim }} className="text-xs mt-1">{unit}</p>
           </div>
         </div>
 
@@ -250,30 +250,30 @@ export default function QuadrantView({
     );
   };
 
-  const row = 'flex items-center gap-3 sm:gap-4 rounded-xl border border-white/70 bg-white/70 px-3.5 sm:px-4 py-3.5 mb-2.5';
+  const row = 'flex items-center gap-4 rounded-xl border border-white/70 bg-white/70 px-4 py-3.5 mb-2.5';
   const panelFinish = panel ? FINISH[panel] : FINISH.next;
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       {/* ── Ribbon: what is happening now ── */}
       {g.live ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
           <div className="flex items-center gap-2.5 mb-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span className="text-sm font-medium text-emerald-700">Now</span>
             <span className="ml-auto text-sm text-slate-500">{g.live.s.room}</span>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+          <div className="flex items-center gap-5">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5">
-                <p className="text-xl sm:text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
+                <p className="text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
                 <CountryFlag code={g.live.s.team.country} size={20} />
               </div>
               <p className="text-base text-slate-600 truncate mt-0.5">{g.live.s.team.projectName}</p>
             </div>
             <button
               onClick={() => onScore(g.live!.s.sessionId)}
-              className="w-full sm:w-auto shrink-0 rounded-xl bg-slate-900 px-7 py-3.5 text-base font-medium text-white hover:bg-slate-800"
+              className="shrink-0 rounded-xl bg-slate-900 px-7 py-3.5 text-base font-medium text-white hover:bg-slate-800"
             >Score now</button>
           </div>
         </div>
@@ -292,7 +292,7 @@ export default function QuadrantView({
       {/* ── The grid, or one quadrant expanded into the same space ── */}
       <div className="flex flex-1 flex-col py-4 min-h-0">
         {panel === null ? (
-          <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:auto-rows-fr">
+          <div className="grid flex-1 grid-cols-2 gap-4 auto-rows-fr">
             <Tile kind="needs" title="NEEDS YOU" subtitle="Awaiting your scoring"
               count={g.needs.length} unit="teams" cta="View all">
               {g.needs.slice(0, 2).map(({ s, c }) => (
@@ -344,7 +344,7 @@ export default function QuadrantView({
             </Tile>
           </div>
         ) : (
-          <div style={cardStyle(panelFinish)} className="flex flex-1 flex-col rounded-2xl p-4 sm:p-6 min-h-[380px] sm:min-h-[440px]">
+          <div style={cardStyle(panelFinish)} className="flex flex-1 flex-col rounded-2xl p-6 min-h-[440px]">
             <div className="flex items-center gap-3 mb-5">
               <p style={{ color: panelFinish.ink }} className="text-base font-semibold tracking-wide">
                 {panel === 'needs' ? 'NEEDS YOU' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
@@ -456,9 +456,9 @@ export default function QuadrantView({
       </div>
 
       {/* ── Ribbon: progress now, coordinator messages later ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:px-6 sm:py-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
         {footer ?? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+          <div className="flex items-center gap-5">
             <div className="min-w-0">
               <p className="text-base font-medium text-slate-900">Your progress</p>
               <p className="text-sm text-slate-500 mt-0.5">

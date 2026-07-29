@@ -125,17 +125,15 @@ export default function JudgePortalPage() {
     <main className="min-h-screen bg-[#f4f6fa] flex flex-col">
       {/* Header */}
       <div className="shrink-0 bg-white border-b border-slate-200">
-        <div className="max-w-5xl mx-auto px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-              {/* The avatar is decoration, and a judge who opened their own
-                  link knows who they are. It goes on narrow screens. */}
-              <div className="hidden sm:flex w-14 h-14 rounded-2xl bg-slate-900/10 border border-slate-300 items-center justify-center text-3xl text-slate-700 font-bold">
+        <div className="max-w-5xl mx-auto px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-slate-900/10 border border-slate-300 flex items-center justify-center text-3xl text-slate-700 font-bold">
                 {judge?.name?.[0]}
               </div>
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 truncate">{judge?.name}</h1>
-                <p className="text-sm sm:text-base text-slate-600 truncate">{judge?.judgeType} Judge · {judge?.organisation}</p>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">{judge?.name}</h1>
+                <p className="text-base text-slate-600">{judge?.judgeType} Judge · {judge?.organisation}</p>
               </div>
             </div>
             {lastUpdated && (
@@ -150,13 +148,13 @@ export default function JudgePortalPage() {
         </div>
       </div>
 
-      <div className={`w-full max-w-5xl mx-auto px-4 py-5 sm:px-6 sm:py-8 ${
+      <div className={`w-full max-w-5xl mx-auto px-6 py-8 ${
         activeScorecard ? '' : 'flex-1 flex flex-col'
       }`}>
         {/* Scoring form overlay */}
         {activeScorecard && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f4f6fa] p-4 sm:static sm:z-auto sm:overflow-visible sm:mb-6 sm:rounded-xl sm:border sm:border-slate-300 sm:bg-white sm:p-6">
-            <div className="flex items-start justify-between mb-4 gap-3">
+          <div className="mb-6 rounded-xl border border-slate-300 bg-white p-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Score: {activeScorecard.teamName}</h2>
                 <p className="text-base text-slate-700">{activeScorecard.projectName}</p>
@@ -313,21 +311,21 @@ export default function JudgePortalPage() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-col gap-4 mt-4 pt-4 border-t border-slate-200 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
               <div className="flex items-center gap-3">
-                <div className="h-2 flex-1 sm:w-48 sm:flex-none bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-2 w-48 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full bg-slate-900 rounded-full transition-all" style={{ width: `${totalScore}%` }} />
                 </div>
                 <span className="text-base font-bold text-slate-900">{totalScore}/100</span>
               </div>
               {!['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status) ? (
-                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <div className="flex gap-2">
                   <button onClick={() => saveOrSubmit(false)} disabled={saving}
-                    className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 text-base rounded-lg disabled:opacity-50">
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 text-base rounded-lg disabled:opacity-50">
                     {saving ? 'Saving...' : 'Save draft'}
                   </button>
                   <button onClick={() => saveOrSubmit(true)} disabled={saving}
-                    className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white text-base font-medium rounded-lg disabled:opacity-50">
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-base font-medium rounded-lg disabled:opacity-50">
                     {saving ? 'Submitting...' : 'Submit scorecard'}
                   </button>
                 </div>
