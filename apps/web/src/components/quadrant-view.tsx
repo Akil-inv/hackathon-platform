@@ -127,12 +127,15 @@ export default function QuadrantView({
   sessions,
   scorecards,
   onScore,
+  onInfo,
   footer,
 }: {
   sessions: Session[];
   scorecards: Scorecard[];
   /** Opens a scorecard. `queue` carries the remaining outstanding session ids. */
   onScore: (sessionId: string, queue?: string[]) => void;
+  /** Opens the use case panel for a session. */
+  onInfo?: (sessionId: string) => void;
   footer?: React.ReactNode;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
@@ -211,7 +214,7 @@ export default function QuadrantView({
       <button
         onClick={() => open(kind)}
         style={cardStyle(f)}
-        className="group flex h-full flex-col rounded-2xl p-3.5 sm:p-5 min-h-[118px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
+        className="group flex h-[122px] sm:h-full flex-col rounded-2xl p-3.5 sm:p-5 sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
       >
         {/* Phone: icon on its own row, then label and count beneath. */}
         <div className="flex sm:hidden flex-col h-full">
@@ -296,6 +299,13 @@ export default function QuadrantView({
               <div className="flex items-center gap-2">
                 <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
                 <CountryFlag code={g.live.s.team.country} size={18} />
+                {onInfo && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onInfo(g.live!.s.sessionId); }}
+                    title="What is this team presenting?"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-300 text-sm font-serif italic text-slate-600 hover:border-slate-400 hover:text-slate-900"
+                  >i</button>
+                )}
               </div>
               {/* The project name is context a judge already has in the room. */}
               <p className="hidden sm:block text-base text-slate-600 truncate mt-0.5">{g.live.s.team.projectName}</p>
@@ -322,10 +332,10 @@ export default function QuadrantView({
       )}
 
       {/* ── The grid, or one quadrant expanded into the same space ── */}
-      <div className="flex flex-1 flex-col py-4 min-h-0">
+      <div className="flex flex-col py-3 sm:flex-1 sm:py-4 sm:min-h-0">
         {panel === null ? (
-          <div className="grid flex-1 grid-cols-2 gap-2.5 sm:gap-4 auto-rows-fr">
-            <Tile kind="needs" title="TO SCORE" subtitle="Awaiting your scoring"
+          <div className="grid grid-cols-2 gap-2.5 sm:flex-1 sm:gap-4 sm:auto-rows-fr">
+            <Tile kind="needs" title="AWAITING YOU" subtitle="Awaiting your submission"
               count={g.needs.length} unit="teams" cta="View all">
               {g.needs.slice(0, 2).map(({ s, c }) => (
                 <p key={s.sessionId} style={{ color: FINISH.needs.dim }} className="text-[15px] truncate">
@@ -379,7 +389,7 @@ export default function QuadrantView({
           <div style={cardStyle(panelFinish)} className="flex flex-1 flex-col rounded-2xl p-4 sm:p-6 min-h-[380px] sm:min-h-[440px]">
             <div className="flex items-center gap-3 mb-5">
               <p style={{ color: panelFinish.ink }} className="text-base font-semibold tracking-wide">
-                {panel === 'needs' ? 'TO SCORE' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
+                {panel === 'needs' ? 'AWAITING YOUR SUBMISSION' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
               </p>
               <button onClick={() => setPanel(null)}
                 style={{ color: panelFinish.ink, borderColor: panelFinish.edge }}
@@ -431,6 +441,13 @@ export default function QuadrantView({
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">{dayOf(s.startTime)} · {s.room}</p>
                     </div>
+                    {onInfo && (
+                      <button
+                        onClick={() => onInfo(s.sessionId)}
+                        title="What is this team presenting?"
+                        className="shrink-0 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+                      >Use case</button>
+                    )}
                   </div>
                 ))}
                 <Pager items={g.next} />

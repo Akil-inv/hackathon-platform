@@ -6,6 +6,7 @@ import DriftMetronome from '@/components/drift-metronome';
 import CountryFlag from '@/components/country-flag';
 import QuadrantView from '@/components/quadrant-view';
 import { platformColor } from '@/components/platform-chip';
+import UseCasePanel from '@/components/use-case-panel';
 
 export default function JudgePortalPage() {
   const params = useParams();
@@ -17,6 +18,7 @@ export default function JudgePortalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [infoSessionId, setInfoSessionId] = useState<string | null>(null);
   const [activeScorecard, setActiveScorecard] = useState<any>(null);
   const [scores, setScores] = useState<Record<string, { score: number | null; comment: string }>>({});
   const [strengths, setStrengths] = useState('');
@@ -149,6 +151,29 @@ export default function JudgePortalPage() {
               the same thing is one too many. */}
         </div>
       </div>
+
+      {infoSessionId && (() => {
+        const s = sessions.find((x: any) => x.sessionId === infoSessionId);
+        if (!s) return null;
+        return (
+          <UseCasePanel
+            data={{
+              teamName: s.team.name,
+              projectName: s.team.projectName,
+              useCaseTitle: s.team.useCaseTitle,
+              problemStatement: s.team.problemStatement,
+              solutionSummary: s.team.solutionSummary,
+              techStack: s.team.techStack,
+              country: s.team.country,
+              track: s.team.track,
+              organisation: s.team.organisation,
+              room: s.room,
+              startTime: s.startTime,
+            }}
+            onClose={() => setInfoSessionId(null)}
+          />
+        );
+      })()}
 
       <div className={`w-full max-w-5xl mx-auto px-4 py-5 sm:px-6 sm:py-8 ${
         activeScorecard ? '' : 'flex-1 flex flex-col'
@@ -350,6 +375,7 @@ export default function JudgePortalPage() {
         ) : (
           <QuadrantView
             sessions={sessions}
+            onInfo={(sessionId: string) => setInfoSessionId(sessionId)}
             scorecards={scorecards}
             onScore={(sessionId: string) => {
               const sc = scorecards.find((c: any) => c.sessionId === sessionId);
