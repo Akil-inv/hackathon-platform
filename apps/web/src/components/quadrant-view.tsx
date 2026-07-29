@@ -214,20 +214,27 @@ export default function QuadrantView({
       <button
         onClick={() => open(kind)}
         style={cardStyle(f)}
-        className="group flex h-[122px] sm:h-full flex-col rounded-2xl p-3.5 sm:p-5 sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
+        className="group flex h-full flex-col rounded-2xl p-3.5 sm:p-5 min-h-[122px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
       >
         {/* Phone: icon on its own row, then label and count beneath. */}
         <div className="flex sm:hidden flex-col h-full">
-          <span
-            style={{ background: f.chip, border: `1px solid ${f.edge}` }}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-          >
-            <span style={{ color: f.ink }} className="text-sm">{ICON[kind]}</span>
-          </span>
-          <div className="mt-auto">
-            <p style={{ color: f.ink }} className="text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap">{title}</p>
+          <div className="flex items-start justify-between">
+            <span
+              style={{ background: f.chip, border: `1px solid ${f.edge}` }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+            >
+              <span style={{ color: f.ink }} className="text-sm">{ICON[kind]}</span>
+            </span>
             <p style={{ color: f.ink }} className="text-3xl font-semibold leading-none tabular-nums">{count}</p>
           </div>
+
+          <p style={{ color: f.ink }} className="mt-2.5 text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap">
+            {title}
+          </p>
+
+          {/* With room on the tile again, a line of detail saves a tap for the
+              question a judge asks most: what is it, and when. */}
+          <div className="mt-1 overflow-hidden">{children}</div>
         </div>
 
         {/* Desktop: the full card. */}
@@ -332,14 +339,15 @@ export default function QuadrantView({
       )}
 
       {/* ── The grid, or one quadrant expanded into the same space ── */}
-      <div className="flex flex-col py-3 sm:flex-1 sm:py-4 sm:min-h-0">
+      <div className="flex flex-1 flex-col py-3 min-h-0 sm:py-4">
         {panel === null ? (
-          <div className="grid grid-cols-2 gap-2.5 sm:flex-1 sm:gap-4 sm:auto-rows-fr">
+          <div className="grid flex-1 grid-cols-2 gap-2.5 auto-rows-fr sm:gap-4">
             <Tile kind="needs" title="AWAITING YOU" subtitle="Awaiting your submission"
               count={g.needs.length} unit="teams" cta="View all">
               {g.needs.slice(0, 2).map(({ s, c }) => (
-                <p key={s.sessionId} style={{ color: FINISH.needs.dim }} className="text-[15px] truncate">
-                  {s.team.name} · {c?.status === 'DRAFT' ? 'half scored' : 'not started'}
+                <p key={s.sessionId} style={{ color: FINISH.needs.dim }} className="text-xs sm:text-[15px] truncate">
+                  {s.team.name}
+                  <span className="hidden sm:inline"> · {c?.status === 'DRAFT' ? 'half scored' : 'not started'}</span>
                 </p>
               ))}
             </Tile>
@@ -347,10 +355,10 @@ export default function QuadrantView({
             <Tile kind="next" title="UP NEXT" subtitle="Your upcoming sessions"
               count={g.next.length} unit="remaining" cta="Open next session">
               {g.next.slice(0, 2).map(({ s }) => (
-                <div key={s.sessionId} className="flex items-center gap-3 mb-1.5">
-                  <span style={{ color: FINISH.next.dim }} className="font-mono text-[15px]">{timeOf(s.startTime)}</span>
-                  <span style={{ color: FINISH.next.ink }} className="text-[15px] font-medium truncate">{s.team.name}</span>
-                  <CountryFlag code={s.team.country} size={15} />
+                <div key={s.sessionId} className="flex items-center gap-2 sm:gap-3 mb-0.5 sm:mb-1.5">
+                  <span style={{ color: FINISH.next.dim }} className="font-mono text-xs sm:text-[15px]">{timeOf(s.startTime)}</span>
+                  <span style={{ color: FINISH.next.ink }} className="text-xs sm:text-[15px] font-medium truncate">{s.team.name}</span>
+                  <CountryFlag code={s.team.country} size={13} />
                 </div>
               ))}
             </Tile>
@@ -360,8 +368,8 @@ export default function QuadrantView({
               {g.done.length > 0 && (
                 <div className="flex items-end justify-between">
                   <div>
-                    <p style={{ color: FINISH.done.dim }} className="text-[15px]">
-                      Average {g.avg} · range {g.lo}–{g.hi}
+                    <p style={{ color: FINISH.done.dim }} className="text-xs sm:text-[15px]">
+                      Avg {g.avg}<span className="hidden sm:inline">erage</span> · {g.lo}–{g.hi}
                     </p>
                     {g.last && (
                       <p style={{ color: FINISH.done.dim }} className="text-sm truncate mt-0.5">
@@ -379,7 +387,7 @@ export default function QuadrantView({
             <Tile kind="revisit" title="REVISIT" subtitle="Flagged for review"
               count={g.revisit.length} unit="teams" cta="View flagged">
               {g.revisit.slice(0, 2).map(({ s }) => (
-                <p key={s.sessionId} style={{ color: FINISH.revisit.dim }} className="text-[15px] truncate">
+                <p key={s.sessionId} style={{ color: FINISH.revisit.dim }} className="text-xs sm:text-[15px] truncate">
                   {s.team.name}
                 </p>
               ))}
