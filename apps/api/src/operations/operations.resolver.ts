@@ -4,7 +4,7 @@ import {
   OperationResult, ReplacementJudge, SessionHealthCheck,
   SwapJudgeInput, ChangeRoomInput, RescheduleInput, MarkAbsentInput,
   AddJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput, SwapSessionsInput,
-  OutstandingScoring,
+  OutstandingScoring, JudgeMessageEntity, MessageResult,
 } from './operations.types';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -86,6 +86,23 @@ export class OperationsResolver {
   }
 
   @Roles('ADMIN', 'COORDINATOR')
+  @Roles('ADMIN', 'COORDINATOR')
+  @Mutation(() => MessageResult)
+  async messageJudges(
+    @Args('eventId') eventId: string,
+    @Args('judgeIds', { type: () => [String] }) judgeIds: string[],
+    @Args('body') body: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.messageJudges(eventId, judgeIds, body, user?.name || user?.email || 'Coordinator');
+  }
+
+  @Roles('ADMIN', 'COORDINATOR')
+  @Query(() => [JudgeMessageEntity])
+  async judgeMessages(@Args('eventId') eventId: string) {
+    return this.service.judgeMessages(eventId);
+  }
+
   @Query(() => [OutstandingScoring])
   async outstandingScoring(@Args('eventId') eventId: string) {
     return this.service.outstandingScoring(eventId);

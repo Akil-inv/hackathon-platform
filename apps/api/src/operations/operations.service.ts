@@ -590,6 +590,46 @@ export class OperationsService {
    * can finish on day two. This exists so a coordinator knows who to chase.
    * The platform never contacts judges itself.
    */
+  /**
+   * Send a note to one or more judges.
+   *
+   * Any undismissed message for the same judge is retired first, so a judge
+   * never accumulates a queue. The newest instruction is the one that matters.
+   */
+  async messageJudges(eventId: string, judgeIds: string[], body: string, sentByName: string) {
+    const text = body.trim();
+    if (!text) throw new BadRequestException('Message cannot be empty');
+    if (judgeIds.length === 0) throw new BadRequestException('Pick at least one judge');
+
+    await this.prisma.judgeMessage.updateMany({
+      where: { judgeId: { in: judgeIds }, dismissedAt: null },
+      data: { dismissedAt: new Date() },
+    });
+
+    await this.prisma.judgeMessage.createMany({
+      data: judgeIds.map(judgeId => ({ judgeId, eventId, body: text, sentByName })),
+    });
+
+    return { sent: judgeIds.length };
+  }
+
+  /** Who has read it and who has not — the useful half of a read receipt. */
+  async judgeMessages(eventId: string) {
+    const messages = await this.prisma.judgeMessage.findMany({
+      where: { eventId, dismissedAt: null },
+      include: { judge: { select: { id: true, name: true } } },
+      orderBy: { sentAt: 'desc' },
+    });
+    return messages.map(m => ({
+      id: m.id,
+      judgeId: m.judge.id,
+      judgeName: m.judge.name,
+      body: m.body,
+      sentByName: m.sentByName,
+      sentAt: m.sentAt,
+    }));
+  }
+
   async outstandingScoring(eventId: string) {
     const sessions = await this.prisma.judgingSession.findMany({
       where: { eventId, stage: 'COMPLETED' },

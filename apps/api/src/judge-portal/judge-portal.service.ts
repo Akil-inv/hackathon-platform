@@ -36,6 +36,13 @@ export class JudgePortalService {
 
     return {
       judge: { id: judge.id, name: judge.name, email: judge.email, judgeType: judge.judgeType, organisation: judge.organisation },
+      message: await this.prisma.judgeMessage
+        .findFirst({
+          where: { judgeId: judge.id, dismissedAt: null },
+          orderBy: { sentAt: 'desc' },
+          select: { id: true, body: true, sentByName: true, sentAt: true },
+        })
+        .catch(() => null),
       sessions: sessions.map(sj => {
         const s = sj.session;
         const sc = s.scorecards?.[0];

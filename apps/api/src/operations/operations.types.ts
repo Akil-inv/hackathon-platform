@@ -96,6 +96,21 @@ export class SwapSessionsInput {
 }
 
 @ObjectType()
+export class JudgeMessageEntity {
+  @Field() id!: string;
+  @Field() judgeId!: string;
+  @Field() judgeName!: string;
+  @Field() body!: string;
+  @Field() sentByName!: string;
+  @Field() sentAt!: Date;
+}
+
+@ObjectType()
+export class MessageResult {
+  @Field(() => Int) sent!: number;
+}
+
+@ObjectType()
 export class OutstandingScoring {
   @Field() judgeId!: string;
   @Field() judgeName!: string;

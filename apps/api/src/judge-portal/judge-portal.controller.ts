@@ -122,6 +122,22 @@ export class JudgePortalController {
    * scoring, and wanting another look at something already submitted is the
    * more common case of the two.
    */
+  /** The judge has read it. Dismissal is what retires a message. */
+  @Public()
+  @Post(':token/dismiss-message')
+  async dismissMessage(
+    @Param('token') token: string,
+    @Query('event') eventId: string,
+    @Body() body: { messageId: string },
+  ) {
+    const judge = await this.service.getJudgeByToken(token, eventId);
+    await this.prisma.judgeMessage.updateMany({
+      where: { id: body.messageId, judgeId: judge.id },
+      data: { dismissedAt: new Date() },
+    });
+    return { success: true };
+  }
+
   @Public()
   @Post(':token/flag')
   async flagForReview(

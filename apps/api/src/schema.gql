@@ -314,6 +314,15 @@ type JudgeLink {
   token: String!
 }
 
+type JudgeMessageEntity {
+  body: String!
+  id: String!
+  judgeId: String!
+  judgeName: String!
+  sentAt: DateTime!
+  sentByName: String!
+}
+
 enum JudgeStatus {
   ACTIVE
   UNAVAILABLE
@@ -361,6 +370,10 @@ input MarkAbsentInput {
   reason: String!
 }
 
+type MessageResult {
+  sent: Int!
+}
+
 type Mutation {
   addCriterion(input: AddCriterionInput!): ScoringCriterionEntity!
   addJudgeToSession(input: AddJudgeInput!): OperationResult!
@@ -390,6 +403,7 @@ type Mutation {
   lockScorecard(scorecardId: String!): ScorecardEntity!
   login(input: LoginInput!): LoginResponse!
   markJudgeAbsent(input: MarkAbsentInput!): OperationResult!
+  messageJudges(body: String!, eventId: String!, judgeIds: [String!]!): MessageResult!
   publishRankings(eventId: String!, trackId: String): RankingOutput
   register(input: RegisterInput!): UserResponse!
   removeCriterion(id: String!): Boolean!
@@ -463,6 +477,7 @@ type Query {
   health: String!
   judge(id: String!): JudgeEntity!
   judgeLinks(eventId: String!): [JudgeLink!]!
+  judgeMessages(eventId: String!): [JudgeMessageEntity!]!
   judges(eventId: String!, judgeType: String, status: String): [JudgeEntity!]!
   judgingRounds(eventId: String!): [JudgingRoundType!]!
   me: UserResponse!
