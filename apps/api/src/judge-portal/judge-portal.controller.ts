@@ -91,6 +91,7 @@ export class JudgePortalController {
         recommendation: sc.recommendation,
         submittedAt: sc.submittedAt,
         reopenReason: sc.reopenReason,
+        flaggedForReview: (sc as any).flaggedForReview ?? false,
         canScore: sessionActive && scorecardEditable && !eventClosed,
         canView: sc.status !== 'NOT_STARTED',
         eventClosed,
@@ -112,6 +113,32 @@ export class JudgePortalController {
         })),
       };
     });
+  }
+
+  /**
+   * Mark a scorecard for a second look, or clear the mark.
+   *
+   * Independent of submission on purpose. Flagging is not a substitute for
+   * scoring, and wanting another look at something already submitted is the
+   * more common case of the two.
+   */
+  @Public()
+  @Post(':token/flag')
+  async flagForReview(
+    @Param('token') token: string,
+    @Query('event') eventId: string,
+    @Body() body: { scorecardId: string; flagged: boolean },
+  ) {
+    const judge = await this.service.getJudgeByToken(token, eventId);
+    const scorecard = await this.prisma.scorecard.findUnique({ where: { id: body.scorecardId } });
+    if (!scorecard) throw new NotFoundException('Scorecard not found');
+    if (scorecard.judgeId !== judge.id) throw new ForbiddenException('This scorecard does not belong to you');
+
+    await this.prisma.scorecard.update({
+      where: { id: body.scorecardId },
+      data: { flaggedForReview: body.flagged } as any,
+    });
+    return { success: true, flagged: body.flagged };
   }
 
   @Public()

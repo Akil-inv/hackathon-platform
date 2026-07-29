@@ -199,6 +199,10 @@ model Team {
   problemStatement String?          @map("problem_statement")
   solutionSummary  String?          @map("solution_summary")
   techStack        String?          @map("tech_stack")
+  // The platform this use case was built on, from a fixed list. Distinct from
+  // techStack, which is free text and cannot be grouped or matched reliably.
+  // Drives vendor matching and platform clustering.
+  platform         String?
   department       String?          @map("department")
   useCategory      String?          @map("use_category")
   vendorTools      String?          @map("vendor_tools")
@@ -532,6 +536,9 @@ model Scorecard {
   submittedAt         DateTime?       @map("submitted_at")
   lockedAt            DateTime?       @map("locked_at")
   reopenReason        String?         @map("reopen_reason")
+  // A judge marking a team for a second look. Without somewhere to put that
+  // thought they either submit a score they are unsure of, or try to remember.
+  flaggedForReview    Boolean         @default(false) @map("flagged_for_review")
   createdAt           DateTime        @default(now()) @map("created_at")
   updatedAt           DateTime        @updatedAt @map("updated_at")
 

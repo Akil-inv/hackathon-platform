@@ -218,6 +218,120 @@ export class JudgesService {
 
     return { imported, skipped: errors.length, errors };
   }
+  /**
+   * Import the availability matrix.
+   *
+   * One row per judge per day. A judge absent from the file for a given day is
+   * not available that day — the file is the whole truth, which is why it is
+   * required rather than optional.
+   *
+   * Existing availability for the event is cleared first. A re-import is a
+   * correction, not an addition, and merging would leave a withdrawn morning
+   * still recorded.
+   */
+  async importAvailability(eventId: string, rows: any[], userId: string) {
+    const errors: Array<{ row: number; field: string; message: string }> = [];
+    let imported = 0;
+
+    const judges = await this.prisma.judge.findMany({
+      where: { eventId, deletedAt: null },
+      select: { id: true, email: true, name: true },
+    });
+    const byEmail = new Map(judges.map(j => [j.email.toLowerCase(), j]));
+
+    // Half-day windows. Lunch sits between them, so a judge available for the
+    // morning is free until 12:00 and an afternoon judge from 13:00.
+    const WINDOWS: Record<string, Array<[string, string]>> = {
+      AM: [['00:00', '12:00']],
+      PM: [['13:00', '23:59']],
+      BOTH: [['00:00', '23:59']],
+    };
+
+    // A re-import replaces rather than merges.
+    await this.prisma.judgeAvailability.deleteMany({
+      where: { judge: { eventId } },
+    });
+
+    const seen = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+
+      const email = row.email?.trim().toLowerCase();
+      if (!email) { errors.push({ row: rowNum, field: 'email', message: 'Required' }); continue; }
+
+      const judge = byEmail.get(email);
+      if (!judge) {
+        errors.push({ row: rowNum, field: 'email', message: `No judge with email "${email}" on this event` });
+        continue;
+      }
+
+      const dateStr = row.date?.trim();
+      if (!dateStr) { errors.push({ row: rowNum, field: 'date', message: 'Required, e.g. 2026-08-28' }); continue; }
+
+      const date = new Date(`${dateStr}T00:00:00Z`);
+      if (isNaN(date.getTime())) {
+        errors.push({ row: rowNum, field: 'date', message: `"${dateStr}" is not a date. Use YYYY-MM-DD.` });
+        continue;
+      }
+
+      const session = (row.session || 'BOTH').trim().toUpperCase();
+      if (!WINDOWS[session]) {
+        errors.push({ row: rowNum, field: 'session', message: `"${row.session}" is not AM, PM or BOTH` });
+        continue;
+      }
+
+      const key = `${judge.id}|${dateStr}`;
+      if (seen.has(key)) {
+        errors.push({ row: rowNum, field: 'date', message: `${judge.name} already has a row for ${dateStr}` });
+        continue;
+      }
+      seen.add(key);
+
+      try {
+        for (const [start, end] of WINDOWS[session]) {
+          const toTime = (t: string) => {
+            const [h, m] = t.split(':').map(Number);
+            const d = new Date(`${dateStr}T00:00:00.000Z`);
+            d.setUTCHours(h, m, 0, 0);
+            return d;
+          };
+          await this.prisma.judgeAvailability.create({
+            data: {
+              judgeId: judge.id,
+              date,
+              startTime: toTime(start),
+              endTime: toTime(end),
+            },
+          });
+        }
+        imported++;
+      } catch (e: any) {
+        errors.push({ row: rowNum, field: 'general', message: e.message?.substring(0, 100) || 'Unknown error' });
+      }
+    }
+
+    // Judges with nothing recorded cannot be scheduled, so say so plainly here
+    // rather than leaving it to be discovered when the solver ignores them.
+    const withAvailability = new Set([...seen].map(k => k.split('|')[0]));
+    const missing = judges.filter(j => !withAvailability.has(j.id));
+
+    await this.audit.log({
+      userId, eventId,
+      action: AuditAction.UPDATE, entityType: 'JudgeAvailability',
+      entityId: 'import-batch',
+      newValues: { imported, skipped: errors.length, judgesWithNoAvailability: missing.length },
+    });
+
+    return {
+      imported,
+      skipped: errors.length,
+      errors,
+      judgesWithNoAvailability: missing.map(j => j.name),
+    };
+  }
+
   async deleteJudge(id: string, userId: string) {
     const judge = await this.prisma.judge.findUniqueOrThrow({ where: { id } });
     await this.prisma.judge.delete({ where: { id } });

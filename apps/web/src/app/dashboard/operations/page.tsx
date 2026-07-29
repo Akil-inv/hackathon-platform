@@ -5,6 +5,8 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { EVENTS_QUERY, SESSIONS_QUERY, JUDGES_QUERY, ROOMS_QUERY, TIMESLOTS_QUERY } from '@/lib/queries';
 import StatusBadge from '@/components/status-badge';
+import CountryFlag from '@/components/country-flag';
+import PlatformChip, { platformColor } from '@/components/platform-chip';
 import { useEventId } from '@/lib/event-store';
 
 const UPDATE_STAGE = `mutation U($input: UpdateStageInput!) { updateSessionStage(input: $input) { success message } }`;
@@ -300,6 +302,9 @@ export default function CommandCentrePage() {
           (isValidClick || isValidDrag) ? 'swap-valid' : '',
           (isInvalidClick || isInvalidDrag) ? 'swap-invalid' : '',
         ].filter(Boolean).join(' ')}
+        style={platformColor(s.teamPlatform) ? {
+          borderLeft: `4px solid ${platformColor(s.teamPlatform)!.fg}`,
+        } : undefined}
         draggable={canSwap}
         onDragStart={(e) => handleDragStart(e, s.id)}
         onDragOver={(e) => handleDragOver(e, s.id)}
@@ -328,6 +333,8 @@ export default function CommandCentrePage() {
             onClick={(e) => { e.stopPropagation(); setExpandedCard(isExpanded ? null : s.id); }}>
             {dueNow && <div className="due-dot" />}
             <span className="sess-team">{s.teamName}</span>
+            <CountryFlag code={s.teamCountry} size={14} showVC />
+            <PlatformChip platform={s.teamPlatform} size="xs" />
             <span style={{ fontSize: 10, color: '#6b7a90' }}>{isExpanded ? '\u25B2' : '\u25BC'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

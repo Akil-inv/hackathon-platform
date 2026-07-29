@@ -9,7 +9,7 @@ export const EVENTS_QUERY = `query { events { id name description location timez
 
 export const TEAMS_QUERY = `
   query Teams($eventId: String!) {
-    teams(eventId: $eventId) { id name projectName trackName teamLeadName teamLeadEmail status organisation techStack createdAt }
+    teams(eventId: $eventId) { id name projectName trackName teamLeadName teamLeadEmail status organisation techStack platform country useCaseTitle createdAt }
   }
 `;
 
@@ -47,7 +47,7 @@ export const AUDIT_LOGS_QUERY = `
 export const SESSIONS_QUERY = `
   query Sessions($eventId: String!) {
     sessions(eventId: $eventId) {
-      id teamId teamName projectName trackName roomId roomName timeSlotId stage
+      id teamId teamName projectName trackName teamCountry teamPlatform roomId roomName timeSlotId stage
       scheduledStart scheduledEnd
       judges { judgeId judgeName attended }
       scorecardsSubmitted scorecardsTotal

@@ -24,11 +24,12 @@ export class TeamEntity {
   @Field({ nullable: true }) problemStatement?: string;
   @Field({ nullable: true }) solutionSummary?: string;
   @Field({ nullable: true }) techStack?: string;
+  @Field({ nullable: true }) platform?: string;
+  @Field({ nullable: true }) country?: string;
   @Field({ nullable: true }) department?: string;
   @Field({ nullable: true }) useCategory?: string;
   @Field({ nullable: true }) vendorTools?: string;
   @Field({ nullable: true }) organisation?: string;
-  @Field({ nullable: true }) country?: string;
   @Field() teamLeadName!: string;
   @Field() teamLeadEmail!: string;
   @Field(() => PresentationMode) presentationMode!: PresentationMode;

@@ -14,6 +14,24 @@ class JudgeInput(BaseModel):
     available_slot_ids: list[str] = []
     conflict_team_ids: list[str] = []
     expertise_track_ids: list[str] = []
+    # L1 leadership, L2 MD, L3 ED, L4 senior, PS professional services,
+    # V vendor. Anchors are decided before the solve; this tells the solver
+    # which judges are eligible for the rotating seat.
+    tier: str = "L3"
+    # Has agreed to be interrupted. Schedulable, but used last so the reserve
+    # stays intact where the pool allows.
+    is_standby: bool = False
+
+
+class AnchorAssignment(BaseModel):
+    # A room-day's fixed seats, decided outside the solver. The anchor sits in
+    # one room all day, stepping out on the slots listed in
+    # anchor_break_slot_ids. PS do not break.
+    room_id: str
+    date: str
+    anchor_judge_id: str | None = None
+    ps_judge_id: str | None = None
+    anchor_break_slot_ids: list[str] = []
 
 class SlotInput(BaseModel):
     id: str
@@ -51,6 +69,20 @@ class ScheduleRequest(BaseModel):
     # Sessions that already exist and are being worked around. Teams in
     # `teams` are the ones still to schedule; these are not re-solved.
     locked_sessions: list[LockedSession] = []
+    # Rooms this pass may use. Empty means any room. Set when remote teams must
+    # go in a room with video conferencing.
+    restrict_to_room_ids: list[str] = []
+    # Prefer placing this pass's teams in adjacent slots, so a vendor attending
+    # half a day sees a contiguous block rather than scattered sessions. Slots
+    # are ordered date-then-time, so this is measured within a day — index
+    # spread across a two-day event would not mean calendar proximity.
+    cluster: bool = False
+    # Fixed anchor seats per room-day. The solver assigns these judges to every
+    # session in that room on that day, and fills only the remaining seat.
+    anchors: list[AnchorAssignment] = []
+    # Judges holding an anchor seat. Excluded from the rotating pool so they
+    # are not also picked as the third judge.
+    reserved_judge_ids: list[str] = []
 
 class SessionAssignment(BaseModel):
     team_id: str

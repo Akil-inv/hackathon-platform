@@ -15,6 +15,8 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     min_j = req.min_judges_per_team
     max_j = req.max_judges_per_team
     locked = req.locked_sessions
+    anchors = req.anchors
+    reserved = set(req.reserved_judge_ids)
 
     n_teams = len(teams)
     n_slots = len(slots)
@@ -59,6 +61,55 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
             prior_judge_load[j_i] += 1
             if s_i is not None:
                 busy_judge_slots.add((j_i, s_i))
+
+    # ─── Anchors ───
+    # Anchors are decided before the solve: an L2 in each room for the day,
+    # with a PS alongside. They are not choices the solver makes — it just has
+    # to honour them, and fill the one remaining seat.
+    #
+    # anchor_for[(slot, room)] is the set of judge indices that must be present
+    # in that session. Every judge in it is already committed, so the rotating
+    # requirement drops by that many.
+    judge_id_to_idx = {j.id: i for i, j in enumerate(judges)}
+    slot_id_to_idx = {s.id: i for i, s in enumerate(slots)}
+    room_id_to_idx = {r.id: i for i, r in enumerate(rooms)}
+
+    anchor_for: dict[tuple[int, int], set[int]] = {}
+
+    for a in anchors:
+        r_i = room_id_to_idx.get(a.room_id)
+        if r_i is None:
+            continue
+
+        break_slots = {slot_id_to_idx[sid] for sid in a.anchor_break_slot_ids if sid in slot_id_to_idx}
+
+        for s_i, slot in enumerate(slots):
+            if getattr(slot, 'date', None) != a.date:
+                continue
+
+            fixed: set[int] = set()
+
+            # The anchor covers every slot in the day except their break.
+            if a.anchor_judge_id and s_i not in break_slots:
+                j_i = judge_id_to_idx.get(a.anchor_judge_id)
+                if j_i is not None:
+                    fixed.add(j_i)
+
+            # PS work continuously — no break pattern.
+            if a.ps_judge_id:
+                j_i = judge_id_to_idx.get(a.ps_judge_id)
+                if j_i is not None:
+                    fixed.add(j_i)
+
+            if fixed:
+                anchor_for[(s_i, r_i)] = fixed
+
+    # Judges eligible for the rotating seat. Anchors are excluded so they are
+    # not counted twice, and L1 sits out the first round entirely.
+    rotating = [
+        i for i, j in enumerate(judges)
+        if j.id not in reserved and getattr(j, 'tier', 'L3') != 'L1'
+    ]
 
     # Judge availability as set of slot indices
     judge_avail = {}
@@ -123,6 +174,17 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
         for t in range(n_teams):
             model.add(x[t, s, r] == 0)
 
+    # 2c. Some passes may only use certain rooms — remote teams need video
+    #     conferencing, and a room without it cannot host them at all.
+    if req.restrict_to_room_ids:
+        allowed = {room_id_to_idx[rid] for rid in req.restrict_to_room_ids if rid in room_id_to_idx}
+        for r in range(n_rooms):
+            if r in allowed:
+                continue
+            for t in range(n_teams):
+                for s in range(n_slots):
+                    model.add(x[t, s, r] == 0)
+
     # 3. A judge can only be in one room per slot (no double-booking)
     for j in range(n_judges):
         for s in range(n_slots):
@@ -141,14 +203,38 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
                 for r in range(n_rooms):
                     model.add(y[j, t, s, r] <= x[t, s, r])
 
-    # 5. Minimum judges per team
+    # 5a. Anchors are present in their room-day, whichever team is placed there.
+    for (s, r), fixed in anchor_for.items():
+        for j in fixed:
+            # If a team occupies this room-slot, the anchor judges it.
+            for t in range(n_teams):
+                model.add(y[j, t, s, r] == x[t, s, r])
+
+    # 5b. Only judges from the rotating pool fill the remaining seats. Anchors
+    #     are handled above; anyone else must not appear.
+    rotating_set = set(rotating)
+    for j in range(n_judges):
+        if j in rotating_set:
+            continue
+        for (s, r), fixed in anchor_for.items():
+            if j in fixed:
+                continue
+        # A judge who is neither rotating nor an anchor here takes no seat.
+        for t in range(n_teams):
+            for s in range(n_slots):
+                for r in range(n_rooms):
+                    if j in anchor_for.get((s, r), set()):
+                        continue
+                    model.add(y[j, t, s, r] == 0)
+
+    # 6. Minimum judges per team, counting the anchors already committed.
     for t in range(n_teams):
         model.add(
             sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
             >= min_j
         )
 
-    # 6. Maximum judges per team
+    # 7. Maximum judges per team
     for t in range(n_teams):
         model.add(
             sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
@@ -190,6 +276,16 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     load_ub = n_teams + max_prior
 
     judge_loads = []
+    # Spread is measured only across judges the solver can actually assign.
+    #
+    # Anchors are decided before the solve and sit at forty sessions each. If
+    # they are included, max_load is pinned at forty and min_load at zero
+    # whatever happens to the rotating pool — load_diff becomes a constant, and
+    # a constant gives the solver nothing to optimise against. It then spends
+    # its effort on the terms that do respond, which is how six judges ended up
+    # with no sessions while the clusters came out immaculate.
+    balanced_loads = []
+
     for j in range(n_judges):
         load = model.new_int_var(0, load_ub, f"load_j{j}")
         model.add(
@@ -199,10 +295,20 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
         )
         judge_loads.append(load)
 
+        # Anchors hold a fixed seat in a room for a day; their load is not a
+        # choice. Everyone else is in the rotating pool and should be evened out.
+        is_anchor = any(j in fixed for fixed in anchor_for.values())
+        if not is_anchor:
+            balanced_loads.append(load)
+
+    # With no anchors — auto mode — every judge is balanced, as before.
+    if not balanced_loads:
+        balanced_loads = judge_loads
+
     max_load = model.new_int_var(0, load_ub, "max_load")
     min_load = model.new_int_var(0, load_ub, "min_load")
-    model.add_max_equality(max_load, judge_loads)
-    model.add_min_equality(min_load, judge_loads)
+    model.add_max_equality(max_load, balanced_loads)
+    model.add_min_equality(min_load, balanced_loads)
     load_diff = model.new_int_var(0, load_ub, "load_diff")
     model.add(load_diff == max_load - min_load)
 
@@ -237,11 +343,93 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
     else:
         model.add(total_room_changes == 0)
 
-    model.minimize(load_diff * 10 + total_room_changes * 5)
+    # C. Clustering: keep this pass's teams close together in time.
+    #
+    #    Measured as the spread between the earliest and latest slot used. A
+    #    vendor attending half a day needs the teams on their platform in a
+    #    contiguous run; three sessions scattered across two days is no use to
+    #    them even though every hard rule is satisfied.
+    if req.cluster and n_teams > 1:
+        # Slots are ordered date-then-time, so a raw index spread of 18 might
+        # be two sessions at the same hour on consecutive days. Splitting the
+        # penalty into "how many days does this pass touch" and "how far apart
+        # within a day" is what makes contiguity mean something on a calendar.
+        slot_days = [getattr(s, 'date', '') for s in slots]
+        distinct_days = sorted(set(slot_days))
+        day_of_slot = {i: distinct_days.index(d) for i, d in enumerate(slot_days)}
+
+        positions = []
+        for t in range(n_teams):
+            pos = model.new_int_var(0, n_slots - 1, f"pos_t{t}")
+            model.add(pos == sum(s * x[t, s, r] for s in range(n_slots) for r in range(n_rooms)))
+            positions.append(pos)
+
+        first_slot = model.new_int_var(0, n_slots - 1, "first_slot")
+        last_slot = model.new_int_var(0, n_slots - 1, "last_slot")
+        model.add_min_equality(first_slot, positions)
+        model.add_max_equality(last_slot, positions)
+
+        spread = model.new_int_var(0, n_slots, "spread")
+        model.add(spread == last_slot - first_slot)
+
+        # Days touched. A pass split over two days costs more than one stretched
+        # across a long single day, because the person hosting the bridge has to
+        # come back the next morning.
+        day_used = []
+        for d in range(len(distinct_days)):
+            used = model.new_bool_var(f"day_used_{d}")
+            slots_on_day = [i for i in range(n_slots) if day_of_slot[i] == d]
+            occupancy = sum(
+                x[t, s, r] for t in range(n_teams) for s in slots_on_day for r in range(n_rooms)
+            )
+            # used is 1 if any team of this pass is placed on this day
+            model.add(occupancy >= 1).only_enforce_if(used)
+            model.add(occupancy == 0).only_enforce_if(used.negated())
+            day_used.append(used)
+
+        days_touched = model.new_int_var(0, len(distinct_days), "days_touched")
+        model.add(days_touched == sum(day_used))
+    else:
+        spread = model.new_int_var(0, 0, "spread")
+        model.add(spread == 0)
+        days_touched = model.new_int_var(0, 0, "days_touched")
+        model.add(days_touched == 0)
+
+    # Spread is weighted above room changes but below workload balance: a
+    # judge doing twice the sessions of another is a worse outcome than a
+    # cluster stretched over an extra hour.
+    # Clustering is weighted above workload balance when it applies. A pass that
+    # exists to give a vendor a coherent block, or to keep one country on one
+    # bridge, is not worth trading for a judge doing one session more than
+    # another — and with anchors fixed, the balance term has little left to
+    # optimise anyway.
+    model.minimize(
+        # Back to 15. This was lowered to 6 while clustering was being tuned,
+        # on the assumption the two were competing. They were not — balance was
+        # measuring something it could not change.
+        load_diff * 15
+        + total_room_changes * 5
+        + spread * 20
+        + days_touched * 60
+    )
 
     # ─── Solve ───
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 120.0
+    # Scale the budget to the problem.
+    #
+    # CP-SAT spends whatever it is given: a five-team pass took the same 120
+    # seconds as a sixty-five-team one, because once a feasible schedule is
+    # found the rest goes on proving nothing better exists. That is fine for a
+    # single solve and ruinous for a sequence of twelve.
+    #
+    # Two seconds per team, floored at 10 so even a two-team pass has room to
+    # search, and capped at 120 so a single large solve behaves as before.
+    budget = min(max(n_teams * 2.0, 10.0), 120.0)
+    solver.parameters.max_time_in_seconds = budget
+
+    # Stop as soon as optimality is proved rather than sitting out the budget.
+    # On a small pass that is often immediate.
+    solver.parameters.stop_after_first_solution = False
     solver.parameters.num_workers = 4
 
     status = solver.solve(model)

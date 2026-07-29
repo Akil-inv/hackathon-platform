@@ -30,7 +30,9 @@ import { catchError, timeout } from 'rxjs/operators';
 const GRAPHQL_TIMEOUTS_MS: Record<string, number> = {
   // Solver is allowed 120s; this leaves headroom for HTTP overhead and for
   // persisting the returned assignments.
-  generateSchedule: 150_000,
+  // Guided mode runs a sequence of solves rather than one, so it is
+  // legitimately slower. 150s was sized for a single 65-team solve.
+  generateSchedule: 300_000,
 
   // Writes one session row per team plus judge assignments.
   saveScheduleSessions: 60_000,

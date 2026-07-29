@@ -26,6 +26,7 @@ export class SchedulingResolver {
       input.minJudgesPerTeam,
       input.maxJudgesPerTeam,
       user.sub,
+      input.guided ?? false,
     );
   }
 

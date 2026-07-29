@@ -16,6 +16,8 @@ export class SessionsService {
       ...s,
       teamName: s.team?.name || '',
       projectName: s.team?.projectName || '',
+      teamCountry: s.team?.country || null,
+      teamPlatform: (s.team as any)?.platform || null,
       trackName: s.team?.track?.name || null,
       roomName: s.room?.name || '',
       judges: (s.judges || []).map((sj: any) => ({

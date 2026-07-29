@@ -19,6 +19,10 @@ export class SessionEntity {
   @Field() teamName!: string;
   @Field() projectName!: string;
   @Field({ nullable: true }) trackName?: string;
+  // Drives the day's logistics: country decides whether the room needs the
+  // video link, platform decides which vendor is expected.
+  @Field({ nullable: true }) teamCountry?: string;
+  @Field({ nullable: true }) teamPlatform?: string;
   @Field() roomId!: string;
   @Field() roomName!: string;
   @Field() timeSlotId!: string;

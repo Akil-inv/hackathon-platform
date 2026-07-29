@@ -6,7 +6,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import { useEventId } from '@/lib/event-store';
 
-const JUDGE_LINKS_QUERY = `query JudgeLinks($eventId: String!) { judgeLinks(eventId: $eventId) { judgeId name email phone token link } }`;
+const JUDGE_LINKS_QUERY = `query JudgeLinks($eventId: String!) { judgeLinks(eventId: $eventId) { judgeId name email phone token link sessionCount } }`;
 
 type NotifConfig = {
   provider: 'none' | 'ses' | 'sns' | 'both';
@@ -294,6 +294,13 @@ ${eventName} Team`}
                   <p className="text-sm font-medium text-white">{link.name}</p>
                   {isSent && <span className="text-xs text-green-400">✓ Sent</span>}
                 </div>
+                <p className="text-xs mt-0.5">
+                  <span className={link.sessionCount === 0 ? 'text-amber-400' : 'text-slate-500'}>
+                    {link.sessionCount === 0
+                      ? 'no sessions — this link opens an empty page'
+                      : `${link.sessionCount} session${link.sessionCount === 1 ? '' : 's'}`}
+                  </span>
+                </p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {link.email}
                   {link.phone ? (

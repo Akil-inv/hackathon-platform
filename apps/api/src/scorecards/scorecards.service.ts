@@ -32,6 +32,7 @@ export class ScorecardsService {
   private enrichScorecard(sc: any) {
     return {
       ...sc,
+      flaggedForReview: sc.flaggedForReview ?? false,
       judgeName: sc.judge?.name || '',
       teamName: sc.team?.name || '',
       projectName: sc.team?.projectName || '',

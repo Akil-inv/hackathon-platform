@@ -7,6 +7,17 @@ import { CreateTeamInput, UpdateTeamInput } from './teams.types';
 /** Countries taking part. Anything else is rejected at import. */
 const VALID_COUNTRIES = ['TH', 'SG', 'MY', 'ID', 'VN', 'HK', 'CN'];
 
+/**
+ * Platforms a use case can be built on.
+ *
+ * A fixed list rather than free text: clustering groups by this, and vendors
+ * are matched against it. "AWS" and "aws lambda" would be different groups,
+ * and an AWS vendor would match neither reliably.
+ *
+ * INTERNAL means no external platform, so no vendor is involved.
+ */
+const VALID_PLATFORMS = ['AWS', 'GCP', 'CLOUDERA', 'PURPLE FABRIC', 'QLIK SENSE', 'INTERNAL', 'OTHER'];
+
 @Injectable()
 export class TeamsService {
   constructor(
@@ -131,6 +142,20 @@ export class TeamsService {
         countryCode = rawCountry;
       }
 
+      let platform: string | null = null;
+      const rawPlatform = row.platform?.trim().toUpperCase();
+      if (rawPlatform) {
+        if (!VALID_PLATFORMS.includes(rawPlatform)) {
+          errors.push({
+            row: rowNum,
+            field: 'platform',
+            message: `"${row.platform}" is not a recognised platform. Use one of: ${VALID_PLATFORMS.join(', ')}`,
+          });
+          continue;
+        }
+        platform = rawPlatform;
+      }
+
       // Check duplicate
       if (existingNames.has(teamName.toLowerCase())) {
         errors.push({ row: rowNum, field: 'team_name', message: `"${teamName}" already exists` });
@@ -162,6 +187,7 @@ export class TeamsService {
             organisation: row.organisation?.trim() || null,
             country: countryCode,
             techStack: row.tech_stack?.trim() || null,
+            platform,
           },
         });
         existingNames.add(teamName.toLowerCase());

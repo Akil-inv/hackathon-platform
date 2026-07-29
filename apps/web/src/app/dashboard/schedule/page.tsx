@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@/lib/use-graphql';
+import CountryFlag from '@/components/country-flag';
+import PlatformChip from '@/components/platform-chip';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
 import {
@@ -17,6 +19,11 @@ interface PlannerCard {
   trackName: string;
   organisation: string;
   techStack: string;
+  // Carried from the team record so filters, grouping and the printed sheet
+  // have something to work with. The solver returns none of these.
+  platform: string;
+  country: string;
+  useCaseTitle: string;
   roomId: string | null;
   date: string | null;
   slotId: string | null;
@@ -50,7 +57,13 @@ export default function ScheduleBuilderPage() {
   // State
   const [plannerCards, setPlannerCards] = useState<PlannerCard[]>([]);
   const [scheduledCards, setScheduledCards] = useState<any[]>([]);
-  const [groupBy, setGroupBy] = useState<'track' | 'organisation' | 'techStack'>('track');
+  const [groupBy, setGroupBy] = useState<'trackName' | 'organisation' | 'platform' | 'country' | 'useCaseTitle'>('trackName');
+  // Narrow the pile rather than just rearranging it. With 79 teams, "show me
+  // the AWS ones" is a different question from "group by platform".
+  const [filterPlatform, setFilterPlatform] = useState('');
+  const [filterCountry, setFilterCountry] = useState('');
+  const [filterTrack, setFilterTrack] = useState('');
+  const [filterUseCase, setFilterUseCase] = useState('');
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState('');
@@ -85,15 +98,208 @@ export default function ScheduleBuilderPage() {
     return false;
   };
 
-  // Group teams
+  // Filter, then group. Filtering first means the group headers reflect what is
+  // actually shown rather than the full set.
+  /**
+   * One matcher for both sides of the screen.
+   *
+   * Planner cards and team records carry the same fields, so a card placed in
+   * the planner and a team still in the pile answer the same question — which
+   * is what makes "show me AWS" useful during manual placement.
+   */
+  const matchesFilter = (t: any) =>
+    (!filterPlatform || t.platform === filterPlatform) &&
+    (!filterCountry || t.country === filterCountry) &&
+    (!filterTrack || t.trackName === filterTrack) &&
+    (!filterUseCase || t.useCaseTitle === filterUseCase);
+
+  const applyFilters = (teams: any[]) => teams.filter(matchesFilter);
+
+  /** Dim rather than hide placed cards, so the shape of the day stays visible. */
+  const filtersActive = !!(filterPlatform || filterCountry || filterTrack || filterUseCase);
+
+  const cardDimmed = (c: any) =>
+    (filterPlatform || filterCountry || filterTrack || filterUseCase) && !matchesFilter(c);
+
   const groupTeams = (teams: any[]) => {
     const groups: Record<string, any[]> = {};
-    teams.forEach(t => {
+    applyFilters(teams).forEach(t => {
       const key = t[groupBy] || t.trackName || 'Other';
       if (!groups[key]) groups[key] = [];
       groups[key].push(t);
     });
     return groups;
+  };
+
+  // Distinct values for the filter dropdowns, drawn from the data so a value
+  // that does not exist is never offered.
+  const distinct = (field: string) =>
+    [...new Set(allTeams.map((t: any) => t[field]).filter(Boolean))].sort();
+
+  /**
+   * Open a plain, printable view of the whole schedule.
+   *
+   * Written into a new window rather than rendered in place: the planner is a
+   * scrolling two-column layout that prints badly, and someone checking a
+   * schedule before confirming it wants every session in order on as few
+   * sheets as possible.
+   */
+  /**
+   * Collect every session on screen — planner and confirmed alike — in one
+   * shape, so print and export do not diverge.
+   */
+  const allRowsForOutput = () => {
+    const roomName = (id: string) => rooms.find((r: any) => r.id === id)?.name || '';
+    const judgeName = (id: string) => judges.find((j: any) => j.id === id)?.name || '';
+    const judgeTier = (id: string) => judges.find((j: any) => j.id === id)?.judgeTier || '';
+
+    const fromPlanner = plannerCards.map((c: any) => ({
+      slotDate: c.date, slotStart: c.slotStart, slotEnd: c.slotEnd,
+      roomName: roomName(c.roomId), teamName: c.teamName, projectName: c.projectName,
+      trackName: c.trackName, organisation: c.organisation,
+      country: c.country, platform: c.platform, useCaseTitle: c.useCaseTitle,
+      judgeNames: (c.judgeIds || []).map(judgeName),
+      judgeTiers: (c.judgeIds || []).map(judgeTier),
+      confirmed: false,
+    }));
+
+    const fromConfirmed = scheduledCards.map((c: any) => ({
+      slotDate: c.slotDate ?? c.date, slotStart: c.slotStart, slotEnd: c.slotEnd,
+      roomName: c.roomName ?? roomName(c.roomId), teamName: c.teamName,
+      projectName: c.projectName, trackName: c.trackName, organisation: c.organisation,
+      country: c.country, platform: c.platform, useCaseTitle: c.useCaseTitle,
+      judgeNames: c.judgeNames ?? (c.judges || []).map((j: any) => j.judgeName),
+      judgeTiers: (c.judges || []).map((j: any) => j.judgeTier || ''),
+      confirmed: true,
+    }));
+
+    return [...fromConfirmed, ...fromPlanner].sort((a: any, b: any) => {
+      const ad = `${a.slotDate} ${a.slotStart}`;
+      const bd = `${b.slotDate} ${b.slotStart}`;
+      return ad.localeCompare(bd) || String(a.roomName).localeCompare(String(b.roomName));
+    });
+  };
+
+  /**
+   * Download the whole schedule as CSV.
+   *
+   * Deliberately unfiltered. Filters on screen are for working; an export is
+   * for taking away, and it is easier to filter in a spreadsheet than to
+   * remember what was set when the button was pressed.
+   */
+  const exportCsv = () => {
+    const rows = allRowsForOutput();
+    if (rows.length === 0) { setMessage('Nothing to export yet'); return; }
+
+    const MAX_JUDGES = 5;
+    const headers = [
+      'status', 'date', 'start_time', 'end_time', 'room',
+      'team', 'project', 'track', 'business_unit', 'country', 'platform', 'use_case',
+      'judge_count', 'panel',
+      ...Array.from({ length: MAX_JUDGES }, (_, i) => `judge_${i + 1}`),
+      ...Array.from({ length: MAX_JUDGES }, (_, i) => `judge_${i + 1}_tier`),
+    ];
+
+    // Quote everything. Team names contain commas and apostrophes, and a
+    // half-quoted file opens wrong in Excel without any warning.
+    const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+    const lines = [headers.join(',')];
+    for (const r of rows) {
+      const names: string[] = r.judgeNames || [];
+      const tiers: string[] = r.judgeTiers || [];
+      lines.push([
+        r.confirmed ? 'CONFIRMED' : 'DRAFT',
+        r.slotDate ?? '', r.slotStart ?? '', r.slotEnd ?? '', r.roomName ?? '',
+        r.teamName ?? '', r.projectName ?? '', r.trackName ?? '',
+        r.organisation ?? '', r.country ?? '', r.platform ?? '', r.useCaseTitle ?? '',
+        names.length, names.join(' | '),
+        ...Array.from({ length: MAX_JUDGES }, (_, i) => names[i] ?? ''),
+        ...Array.from({ length: MAX_JUDGES }, (_, i) => tiers[i] ?? ''),
+      ].map(cell).join(','));
+    }
+
+    // BOM so Excel reads the file as UTF-8 rather than guessing.
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = `${(event?.name || 'schedule').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMessage(`Exported ${rows.length} sessions`);
+  };
+
+  const printSchedule = () => {
+    const rows = allRowsForOutput();
+    if (rows.length === 0) { setMessage('Nothing to print yet'); return; }
+
+    const esc = (s: any) => String(s ?? '').replace(/[<>&]/g, c =>
+      ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c] as string));
+
+    const byDay: Record<string, any[]> = {};
+    for (const r of rows) {
+      const d = r.slotDate || 'Unscheduled';
+      (byDay[d] = byDay[d] || []).push(r);
+    }
+
+    const eventName = event?.name || 'Schedule';
+
+    const body = Object.entries(byDay).map(([day, list]) => `
+      <h2>${esc(new Date(day).toLocaleDateString('en-SG',
+        { weekday: 'long', day: 'numeric', month: 'long' }))}
+        <span class="count">${list.length} sessions</span></h2>
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Room</th><th>Team</th><th>Country</th>
+          <th>Platform</th><th>Use case</th><th>Panel</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${list.map((r: any) => `<tr>
+            <td class="t">${esc(r.slotStart)}</td>
+            <td>${esc(r.roomName)}</td>
+            <td class="team">${esc(r.teamName)}</td>
+            <td>${esc(r.country || '')}</td>
+            <td>${esc(r.platform || '')}</td>
+            <td>${esc(r.useCaseTitle || '')}</td>
+            <td class="panel">${esc((r.judgeNames || []).join(', '))}</td>
+            <td class="st">${r.confirmed ? 'confirmed' : 'draft'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`).join('');
+
+    const html = `<!doctype html><html><head><meta charset="utf-8">
+      <title>${esc(eventName)} — Schedule</title>
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        body { font: 11px -apple-system, system-ui, sans-serif; color: #111; }
+        h1 { font-size: 16px; margin: 0 0 2px; }
+        .sub { color: #666; font-size: 11px; margin-bottom: 16px; }
+        h2 { font-size: 13px; margin: 18px 0 6px; page-break-after: avoid; }
+        h2 .count { font-weight: 400; color: #666; font-size: 11px; margin-left: 8px; }
+        table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+        tr { page-break-inside: avoid; }
+        th { text-align: left; font-size: 9px; text-transform: uppercase;
+             letter-spacing: .04em; color: #666; border-bottom: 1px solid #999;
+             padding: 4px 6px; }
+        td { padding: 4px 6px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+        .t { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .team { font-weight: 600; }
+        .panel { color: #444; font-size: 10px; }
+        .st { color: #888; font-size: 9px; text-transform: uppercase; white-space: nowrap; }
+      </style></head><body>
+      <h1>${esc(eventName)}</h1>
+      <div class="sub">${rows.length} sessions &middot; printed ${new Date().toLocaleString('en-SG')}</div>
+      ${body}
+      </body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { setMessage('Allow pop-ups to print the schedule'); return; }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 300);
   };
 
   // Available slots for a room+date
@@ -119,6 +325,8 @@ export default function ScheduleBuilderPage() {
       teamId: team.id, teamName: team.name, projectName: team.projectName,
       trackName: team.trackName || '', organisation: team.organisation || '',
       techStack: team.techStack || '',
+      platform: team.platform || '', country: team.country || '',
+      useCaseTitle: team.useCaseTitle || '',
       roomId: null, date: null, slotId: null, slotStart: null, slotEnd: null, judgeIds: [],
     }]);
   };
@@ -173,13 +381,18 @@ export default function ScheduleBuilderPage() {
   };
 
   // Auto-generate
+  // Guided scheduling anchors an MD and a PS to each room and holds vendors
+  // back for manual invitation. Off means the scheduler behaves as it always
+  // has, so there is a way back if guided output looks wrong.
+  const [guided, setGuided] = useState(false);
+
   const autoGenerate = async () => {
     if (!eventId) return;
     setGenerating(true);
     try {
       const client = createClient(token);
       const res = await client.mutation(GENERATE_SCHEDULE_MUTATION, {
-        input: { eventId, minJudgesPerTeam: event?.minJudgesPerTeam || 3, maxJudgesPerTeam: event?.maxJudgesPerTeam || 5 }
+        input: { eventId, minJudgesPerTeam: event?.minJudgesPerTeam || 3, maxJudgesPerTeam: event?.maxJudgesPerTeam || 5, guided }
       }).toPromise();
 
       console.log('Generate response:', JSON.stringify(res, null, 2));
@@ -193,13 +406,27 @@ export default function ScheduleBuilderPage() {
       const result = res.data?.generateSchedule;
       if (result?.success) {
         // Add generated sessions to planner
-        const cards: PlannerCard[] = result.sessions.map((s: any) => ({
-          teamId: s.teamId, teamName: s.teamName, projectName: '', trackName: '',
-          organisation: '', techStack: '',
-          roomId: s.roomId, date: s.slotDate,
-          slotId: s.slotId, slotStart: s.slotStart, slotEnd: s.slotEnd,
-          judgeIds: s.judgeIds,
-        }));
+        // The solver returns ids, rooms and slots. Everything else about the
+        // team — platform, country, track, use case — has to come from the
+        // record we already hold, or the card arrives knowing nothing about
+        // what it represents.
+        const cards: PlannerCard[] = result.sessions.map((s: any) => {
+          const team = allTeams.find((t: any) => t.id === s.teamId) || {};
+          return {
+            teamId: s.teamId,
+            teamName: s.teamName || team.name || '',
+            projectName: team.projectName || '',
+            trackName: team.trackName || '',
+            organisation: team.organisation || '',
+            techStack: team.techStack || '',
+            platform: team.platform || '',
+            country: team.country || '',
+            useCaseTitle: team.useCaseTitle || '',
+            roomId: s.roomId, date: s.slotDate,
+            slotId: s.slotId, slotStart: s.slotStart, slotEnd: s.slotEnd,
+            judgeIds: s.judgeIds,
+          };
+        });
         cards.sort((a: PlannerCard, b: PlannerCard) => {
           if (a.date !== b.date) return (a.date || "").localeCompare(b.date || "");
           return (a.slotStart || "").localeCompare(b.slotStart || "");
@@ -283,9 +510,36 @@ export default function ScheduleBuilderPage() {
               ↺ Reset Schedule
             </button>
           )}
+          <button
+            onClick={() => setGuided(v => !v)}
+            title={guided
+              ? 'Anchors an MD and a PS to each room, and holds vendors back for you to invite'
+              : 'Standard scheduling — the solver assigns every seat'}
+            className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border transition-all ${
+              guided
+                ? 'bg-accent/10 border-accent/40 text-accent'
+                : 'bg-dark-700 border-dark-500 text-slate-400 hover:text-slate-300'
+            }`}>
+            <span className={`inline-block w-7 h-4 rounded-full transition-all relative ${
+              guided ? 'bg-accent' : 'bg-dark-500'
+            }`}>
+              <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${
+                guided ? 'left-3.5' : 'left-0.5'
+              }`} />
+            </span>
+            {guided ? 'Guided' : 'Auto'}
+          </button>
           <button onClick={autoGenerate} disabled={generating || unscheduledTeams.length === 0 || isEventLocked}
             className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
-            {generating ? '⟳ Generating...' : '⚡ Auto-Generate'}
+            {generating ? '⟳ Generating...' : guided ? '⚡ Generate (guided)' : '⚡ Auto-Generate'}
+          </button>
+          <button onClick={exportCsv} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
+            className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
+            Export CSV
+          </button>
+          <button onClick={printSchedule} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
+            className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
+            Print
           </button>
           <button onClick={confirmAll} disabled={saving || completePlannerCount === 0 || isEventLocked}
             className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-medium rounded-lg transition-all disabled:opacity-50 shadow-lg shadow-accent/20">
@@ -333,6 +587,50 @@ export default function ScheduleBuilderPage() {
         </div>
       </div>
 
+      {/* Filters — apply to the remaining pile and the planner alike, so
+          "where are the AWS teams" answers for both at once. */}
+      <div className="flex-shrink-0 mb-4 flex items-center gap-2 rounded-xl border border-dark-600 bg-dark-800/50 px-3 py-2">
+        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mr-1">Filter</span>
+
+        <select value={filterPlatform} onChange={(e) => setFilterPlatform(e.target.value)}
+          className="bg-dark-900/60 border border-dark-600 rounded text-[11px] text-slate-300 px-2 py-1 outline-none focus:border-accent/50">
+          <option value="">All platforms</option>
+          {distinct('platform').map((p: any) => <option key={p} value={p}>{p}</option>)}
+        </select>
+
+        <select value={filterCountry} onChange={(e) => setFilterCountry(e.target.value)}
+          className="bg-dark-900/60 border border-dark-600 rounded text-[11px] text-slate-300 px-2 py-1 outline-none focus:border-accent/50">
+          <option value="">All countries</option>
+          {distinct('country').map((c: any) => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        <select value={filterTrack} onChange={(e) => setFilterTrack(e.target.value)}
+          className="bg-dark-900/60 border border-dark-600 rounded text-[11px] text-slate-300 px-2 py-1 outline-none focus:border-accent/50">
+          <option value="">All tracks</option>
+          {distinct('trackName').map((t: any) => <option key={t} value={t}>{t}</option>)}
+        </select>
+
+        <select value={filterUseCase} onChange={(e) => setFilterUseCase(e.target.value)}
+          className="bg-dark-900/60 border border-dark-600 rounded text-[11px] text-slate-300 px-2 py-1 outline-none focus:border-accent/50 max-w-[220px]">
+          <option value="">All use cases</option>
+          {distinct('useCaseTitle').map((u: any) => <option key={u} value={u}>{u}</option>)}
+        </select>
+
+        {(filterPlatform || filterCountry || filterTrack || filterUseCase) && (
+          <>
+            <span className="text-[11px] text-slate-500">
+              {applyFilters(unscheduledTeams).length} of {unscheduledTeams.length} remaining
+              {' · '}
+              {scheduledCards.filter((c: any) => matchesFilter(c)).length} placed
+            </span>
+            <button onClick={() => { setFilterPlatform(''); setFilterCountry(''); setFilterTrack(''); setFilterUseCase(''); }}
+              className="ml-auto text-[11px] text-amber-400 hover:text-amber-300">
+              Clear
+            </button>
+          </>
+        )}
+      </div>
+
       {/* Three-panel layout */}
       <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
 
@@ -344,9 +642,11 @@ export default function ScheduleBuilderPage() {
             </div>
             <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as any)}
               className="mt-2 w-full bg-dark-900/60 border border-dark-600 rounded text-[10px] text-slate-300 px-2 py-1 outline-none">
-              <option value="track">Group by Track</option>
+              <option value="trackName">Group by Track</option>
+              <option value="platform">Group by Platform</option>
+              <option value="country">Group by Country</option>
+              <option value="useCaseTitle">Group by Use case</option>
               <option value="organisation">Group by Organisation</option>
-              <option value="techStack">Group by Tech Stack</option>
             </select>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-3">
@@ -378,12 +678,14 @@ export default function ScheduleBuilderPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-white">Planner</span>
               <span className="text-[10px] text-slate-500">
-                {plannerCards.length} cards · {completePlannerCount} ready
+                {filtersActive
+                  ? `${plannerCards.filter(matchesFilter).length} of ${plannerCards.length} shown`
+                  : `${plannerCards.length} cards · ${completePlannerCount} ready`}
               </span>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {plannerCards.map((card) => {
+            {plannerCards.filter(matchesFilter).map((card) => {
               const complete = isCardComplete(card);
               const availSlots = card.roomId && card.date ? getAvailableSlots(card.roomId, card.date, card.teamId) : [];
 
@@ -411,8 +713,14 @@ export default function ScheduleBuilderPage() {
                   {/* Team info + remove button */}
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="text-sm font-semibold text-white">{card.teamName}</p>
-                      <p className="text-xs text-slate-400">{card.projectName}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-white">{card.teamName}</p>
+                        <CountryFlag code={card.country} size={15} />
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                        <p className="text-xs text-slate-400">{card.projectName}</p>
+                        <PlatformChip platform={card.platform} size="xs" />
+                      </div>
                       <div className="flex gap-2 mt-1">
                         {card.trackName && <span className="text-[10px] bg-accent/10 text-accent px-1.5 py-0.5 rounded">{card.trackName}</span>}
                         {card.organisation && <span className="text-[10px] bg-dark-600 text-slate-400 px-1.5 py-0.5 rounded">{card.organisation}</span>}
@@ -495,6 +803,11 @@ export default function ScheduleBuilderPage() {
               );
             })}
 
+            {plannerCards.length > 0 && plannerCards.filter(matchesFilter).length === 0 && (
+              <div className="text-center py-12 text-xs text-slate-500">
+                No cards match the filter.
+              </div>
+            )}
             {plannerCards.length === 0 && (
               <div className="py-16 text-center">
                 <p className="text-slate-500 text-sm">Click a team on the left to start planning</p>

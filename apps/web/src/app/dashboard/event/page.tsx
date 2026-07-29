@@ -114,6 +114,20 @@ export default function EventSetupPage() {
   const eventDays = getEvDays(ef.startDate, ef.endDate);
   const judgingSlots = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length;
 
+  // Availability is required for scheduling, so its coverage belongs on the
+  // setup page rather than being discovered when a solve fails.
+  const judgesWithAvailability = judges.filter((j: any) => (j.availability?.length ?? 0) > 0).length;
+  const availabilityByDate = (() => {
+    const counts = new Map<string, number>();
+    for (const j of judges) {
+      for (const a of (j.availability ?? [])) {
+        const key = new Date(a.date).toISOString().split('T')[0];
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort().map(([date, count]) => ({ date, count }));
+  })();
+
   // Step completion checks
   const s1 = !!event; // Event created (false while creatingNew, showing the create form)
   // Step 2 is complete when the categories total 100 and each category's rows
@@ -475,7 +489,7 @@ export default function EventSetupPage() {
             {teams.length > 0 ? 'Upload more' : 'Upload teams CSV'}
             <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('teams', e.target.files[0]); }} />
           </label>
-          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary, country (TH SG MY ID VN HK CN)</span>
+          <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary, country (TH SG MY ID VN HK CN), platform (AWS GCP CLOUDERA PURPLE FABRIC QLIK SENSE INTERNAL OTHER)</span>
         </div>
         {!s3 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load teams. Track names must match the tracks above.</div>}
 
@@ -531,6 +545,48 @@ export default function EventSetupPage() {
           <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, phone, judge_type, judge_tier, organisation, max_sessions, standby</span>
         </div>
         {!s4 && <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>Upload a CSV to load judges.</div>}
+
+        {judges.length > 0 && (
+          <div style={{marginTop:16,paddingTop:14,borderTop:'0.5px solid rgba(255,255,255,0.06)'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:10,marginBottom:8}}>
+              <span style={{fontSize:13,fontWeight:500,color:'#fff'}}>Judge availability</span>
+              <span style={{fontSize:12,color: judgesWithAvailability === judges.length ? '#10b981' : '#f59e0b'}}>
+                {judgesWithAvailability} of {judges.length} covered
+              </span>
+            </div>
+
+            {/* The count per day is the number that matters. "93 rows
+                imported" says nothing about whether the 31st has an anchor. */}
+            {availabilityByDate.length > 0 && (
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+                {availabilityByDate.map((d: any) => (
+                  <span key={d.date} style={{fontSize:11,color:'#94a3b8',background:'rgba(255,255,255,0.04)',
+                    border:'0.5px solid rgba(255,255,255,0.07)',padding:'3px 9px',borderRadius:5}}>
+                    {new Date(d.date).toLocaleDateString('en-SG',{day:'numeric',month:'short'})}
+                    <span style={{marginLeft:6,color:'#e2e8f0',fontWeight:500}}>{d.count}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div style={{display:'flex',gap:10,alignItems:'center'}}>
+              <label className="btn btn-sec btn-sm" style={{cursor:'pointer'}}>
+                {judgesWithAvailability > 0 ? 'Replace availability' : 'Upload availability CSV'}
+                <input type="file" accept=".csv" style={{display:'none'}}
+                  onChange={e => { if (e.target.files?.[0]) uploadCsv('availability', e.target.files[0]); }} />
+              </label>
+              <span style={{fontSize:12,color:'#6b7a90'}}>
+                Columns: email, date (YYYY-MM-DD), session (AM / PM / BOTH) &mdash; one row per judge per day
+              </span>
+            </div>
+
+            {judgesWithAvailability < judges.length && (
+              <div style={{fontSize:13,color:'#f59e0b',marginTop:8}}>
+                {judges.length - judgesWithAvailability} judge(s) have no availability and cannot be scheduled.
+              </div>
+            )}
+          </div>
+        )}
       </div>
       </div>
 

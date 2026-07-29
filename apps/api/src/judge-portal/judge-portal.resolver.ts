@@ -1,4 +1,4 @@
-import { Resolver, Query, Args, ObjectType, Field } from '@nestjs/graphql';
+import { Resolver, Query, Args, ObjectType, Field, Int } from '@nestjs/graphql';
 import { JudgePortalService } from './judge-portal.service';
 import { Roles } from '../auth/roles.decorator';
 
@@ -10,6 +10,8 @@ export class JudgeLink {
   @Field() token!: string;
   @Field({ nullable: true }) phone?: string;
   @Field() link!: string;
+  /** Zero means this link opens an empty page — worth knowing before sending. */
+  @Field(() => Int) sessionCount!: number;
 }
 
 @Resolver()

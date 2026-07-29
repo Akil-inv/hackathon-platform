@@ -249,6 +249,7 @@ enum ExpertiseLevel {
 
 input GenerateScheduleInput {
   eventId: String!
+  guided: Boolean! = false
   maxJudgesPerTeam: Int! = 5
   minJudgesPerTeam: Int! = 3
 }
@@ -309,6 +310,7 @@ type JudgeLink {
   link: String!
   name: String!
   phone: String
+  sessionCount: Int!
   token: String!
 }
 
@@ -683,8 +685,10 @@ type SessionEntity {
   scorecardsSubmitted: Int!
   scorecardsTotal: Int!
   stage: SessionStage!
+  teamCountry: String
   teamId: String!
   teamName: String!
+  teamPlatform: String
   timeSlotId: String!
   trackName: String
 }
@@ -777,6 +781,7 @@ type TeamEntity {
   members: [TeamMemberEntity!]
   name: String!
   organisation: String
+  platform: String
   presentationMode: PresentationMode!
   problemStatement: String
   projectName: String!
