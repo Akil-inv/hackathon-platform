@@ -186,6 +186,19 @@ export default function QuadrantView({
     boxShadow: f.bevel,
   });
 
+  const ICON = { needs: '!', next: '→', done: '✓', revisit: '⚑' } as const;
+
+  /**
+   * Two layouts, one component.
+   *
+   * On a phone the tile is a square carrying only what can be read at a
+   * glance: icon, label, count. Everything else — the subtitle, the preview
+   * rows, the footer link — is hidden, because none of it is actionable from
+   * the tile and all of it is one tap away. That is what lets four tiles, the
+   * ribbon and the progress bar share a phone screen without scrolling.
+   *
+   * From 640px up the fuller tile returns.
+   */
   const Tile = ({
     kind, title, subtitle, count, unit, cta, children,
   }: {
@@ -198,35 +211,50 @@ export default function QuadrantView({
       <button
         onClick={() => open(kind)}
         style={cardStyle(f)}
-        className="group flex h-full flex-col rounded-2xl p-4 sm:p-5 min-h-[132px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
+        className="group flex h-full flex-col rounded-2xl p-3.5 sm:p-5 min-h-[118px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
       >
-        <div className="flex items-start gap-3.5">
+        {/* Phone: icon on its own row, then label and count beneath. */}
+        <div className="flex sm:hidden flex-col h-full">
           <span
             style={{ background: f.chip, border: `1px solid ${f.edge}` }}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
           >
-            <span style={{ color: f.ink }} className="text-lg">
-              {kind === 'needs' ? '!' : kind === 'next' ? '→' : kind === 'done' ? '✓' : '⚑'}
-            </span>
+            <span style={{ color: f.ink }} className="text-sm">{ICON[kind]}</span>
           </span>
-          <div className="flex-1 min-w-0">
-            <p style={{ color: f.ink }} className="text-base font-semibold tracking-wide whitespace-nowrap">{title}</p>
-            <p style={{ color: f.dim }} className="text-sm truncate">{subtitle}</p>
-          </div>
-          <div className="text-right shrink-0 pl-2">
-            <p style={{ color: f.ink }} className="text-3xl sm:text-4xl font-semibold leading-none tabular-nums">{count}</p>
-            <p style={{ color: f.dim }} className="text-xs mt-1 whitespace-nowrap">{unit}</p>
+          <div className="mt-auto">
+            <p style={{ color: f.ink }} className="text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap">{title}</p>
+            <p style={{ color: f.ink }} className="text-3xl font-semibold leading-none tabular-nums">{count}</p>
           </div>
         </div>
 
-        <div className="flex-1 pt-4">{children}</div>
+        {/* Desktop: the full card. */}
+        <div className="hidden sm:flex sm:flex-col sm:h-full">
+          <div className="flex items-start gap-3.5">
+            <span
+              style={{ background: f.chip, border: `1px solid ${f.edge}` }}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+            >
+              <span style={{ color: f.ink }} className="text-lg">{ICON[kind]}</span>
+            </span>
+            <div className="flex-1 min-w-0">
+              <p style={{ color: f.ink }} className="text-base font-semibold tracking-wide whitespace-nowrap">{title}</p>
+              <p style={{ color: f.dim }} className="text-sm truncate">{subtitle}</p>
+            </div>
+            <div className="text-right shrink-0 pl-2">
+              <p style={{ color: f.ink }} className="text-4xl font-semibold leading-none tabular-nums">{count}</p>
+              <p style={{ color: f.dim }} className="text-xs mt-1 whitespace-nowrap">{unit}</p>
+            </div>
+          </div>
 
-        <div
-          style={{ borderTop: `1px solid ${f.edge}` }}
-          className="flex items-center justify-between pt-3 mt-1"
-        >
-          <span style={{ color: f.ink }} className="text-sm font-medium">{cta}</span>
-          <span style={{ color: f.dim }} className="text-lg transition-transform group-hover:translate-x-0.5">›</span>
+          <div className="flex-1 pt-4">{children}</div>
+
+          <div
+            style={{ borderTop: `1px solid ${f.edge}` }}
+            className="flex items-center justify-between pt-3 mt-1"
+          >
+            <span style={{ color: f.ink }} className="text-sm font-medium">{cta}</span>
+            <span style={{ color: f.dim }} className="text-lg transition-transform group-hover:translate-x-0.5">›</span>
+          </div>
         </div>
       </button>
     );
@@ -257,24 +285,28 @@ export default function QuadrantView({
     <div className="flex flex-1 flex-col min-h-0">
       {/* ── Ribbon: what is happening now ── */}
       {g.live ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5 shadow-sm">
-          <div className="flex items-center gap-2.5 mb-1.5">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:px-6 sm:py-5 shadow-sm">
+          <div className="flex items-center gap-2.5 mb-1">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
             <span className="text-sm font-medium text-emerald-700">Now</span>
             <span className="ml-auto text-sm text-slate-500">{g.live.s.room}</span>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+          <div className="flex items-center gap-3 sm:gap-5">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2.5">
-                <p className="text-xl sm:text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
-                <CountryFlag code={g.live.s.team.country} size={20} />
+              <div className="flex items-center gap-2">
+                <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
+                <CountryFlag code={g.live.s.team.country} size={18} />
               </div>
-              <p className="text-base text-slate-600 truncate mt-0.5">{g.live.s.team.projectName}</p>
+              {/* The project name is context a judge already has in the room. */}
+              <p className="hidden sm:block text-base text-slate-600 truncate mt-0.5">{g.live.s.team.projectName}</p>
             </div>
             <button
               onClick={() => onScore(g.live!.s.sessionId)}
-              className="w-full sm:w-auto shrink-0 rounded-xl bg-slate-900 px-7 py-3.5 text-base font-medium text-white hover:bg-slate-800"
-            >Score now</button>
+              className="shrink-0 rounded-xl bg-slate-900 px-5 sm:px-7 py-2.5 sm:py-3.5 text-base font-medium text-white hover:bg-slate-800"
+            >
+              <span className="sm:hidden">Score</span>
+              <span className="hidden sm:inline">Score now</span>
+            </button>
           </div>
         </div>
       ) : (
@@ -292,8 +324,8 @@ export default function QuadrantView({
       {/* ── The grid, or one quadrant expanded into the same space ── */}
       <div className="flex flex-1 flex-col py-4 min-h-0">
         {panel === null ? (
-          <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 sm:auto-rows-fr">
-            <Tile kind="needs" title="NEEDS YOU" subtitle="Awaiting your scoring"
+          <div className="grid flex-1 grid-cols-2 gap-2.5 sm:gap-4 auto-rows-fr">
+            <Tile kind="needs" title="TO SCORE" subtitle="Awaiting your scoring"
               count={g.needs.length} unit="teams" cta="View all">
               {g.needs.slice(0, 2).map(({ s, c }) => (
                 <p key={s.sessionId} style={{ color: FINISH.needs.dim }} className="text-[15px] truncate">
@@ -347,7 +379,7 @@ export default function QuadrantView({
           <div style={cardStyle(panelFinish)} className="flex flex-1 flex-col rounded-2xl p-4 sm:p-6 min-h-[380px] sm:min-h-[440px]">
             <div className="flex items-center gap-3 mb-5">
               <p style={{ color: panelFinish.ink }} className="text-base font-semibold tracking-wide">
-                {panel === 'needs' ? 'NEEDS YOU' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
+                {panel === 'needs' ? 'TO SCORE' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
               </p>
               <button onClick={() => setPanel(null)}
                 style={{ color: panelFinish.ink, borderColor: panelFinish.edge }}
@@ -456,14 +488,16 @@ export default function QuadrantView({
       </div>
 
       {/* ── Ribbon: progress now, coordinator messages later ── */}
-      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3.5 sm:px-6 sm:py-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 sm:px-6 sm:py-4 shadow-sm">
         {footer ?? (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+          <div className="flex items-center gap-3 sm:gap-5">
             <div className="min-w-0">
-              <p className="text-base font-medium text-slate-900">Your progress</p>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {g.done.length} of {sessions.length} scored
-                {g.next.length > 0 && ` · next at ${timeOf(g.next[0].s.startTime)}`}
+              <p className="hidden sm:block text-base font-medium text-slate-900">Your progress</p>
+              <p className="text-sm text-slate-500 sm:mt-0.5 whitespace-nowrap">
+                {g.done.length} of {sessions.length}
+                <span className="hidden sm:inline"> scored
+                  {g.next.length > 0 && ` · next at ${timeOf(g.next[0].s.startTime)}`}
+                </span>
               </p>
             </div>
             <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
