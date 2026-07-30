@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useQuery } from '@/lib/use-graphql';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
-import { EVENTS_QUERY, ROOMS_QUERY, JUDGES_QUERY } from '@/lib/queries';
+import { SET_ROOM_AVAILABILITY, ROOM_UNAVAILABILITY_QUERY, EVENTS_QUERY, ROOMS_QUERY, JUDGES_QUERY } from '@/lib/queries';
 import { useEventId, useEventStore } from '@/lib/event-store';
 import ReadinessPlanner from '@/components/readiness-planner';
 import CriteriaBuilder from '@/components/criteria-builder';
@@ -32,6 +32,16 @@ const fmt = (s: string, o?: any) => { if (!s) return '-'; return new Date(s.leng
 const toDS = (s: string) => { if (!s) return ''; return new Date(s).toLocaleDateString('en-CA', { timeZone: TZ }); };
 const getEvDays = (a: string, b: string) => { if (!a || !b) return []; const d: string[] = []; const s = new Date(a+'T00:00:00+08:00'); const e = new Date(b+'T00:00:00+08:00'); for (let x = new Date(s); x <= e; x.setTime(x.getTime()+86400000)) d.push(x.toLocaleDateString('en-CA',{timeZone:TZ})); return d; };
 const slDS = (s: string) => s ? new Date(s).toLocaleDateString('en-CA',{timeZone:TZ}) : '';
+
+/**
+ * Drop Saturdays and Sundays from a list of days.
+ *
+ * Applied at the point the day list is derived, so the room availability table,
+ * the Generate buttons and the capacity check all agree without each needing to
+ * know about weekends.
+ */
+const dropWeekends = (days: string[]) =>
+  days.filter(d => { const n = new Date(d + 'T12:00:00Z').getUTCDay(); return n !== 0 && n !== 6; });
 
 export default function EventSetupPage() {
   const { data: evData } = useQuery<any>(EVENTS_QUERY);
@@ -111,11 +121,71 @@ export default function EventSetupPage() {
   // Derived data
   const criteria = template?.criteria || [];
   // totalPoints is computed below, over categories only.
-  const eventDays = getEvDays(ef.startDate, ef.endDate);
+  // Most corporate events skip weekends, so that is the default. A coordinator
+  // running one that does not will find the toggle beside the dates.
+  const [skipWeekends, setSkipWeekends] = useState(true);
+
+  const allRangeDays = getEvDays(ef.startDate, ef.endDate);
+  const weekendCount = allRangeDays.length - dropWeekends(allRangeDays).length;
+  const eventDays = skipWeekends ? dropWeekends(allRangeDays) : allRangeDays;
   const judgingSlots = timeSlots.filter((s: any) => s.slotType === 'JUDGING').length;
 
   // Availability is required for scheduling, so its coverage belongs on the
   // setup page rather than being discovered when a solve fails.
+  // Rooms unavailable for part of a day, keyed `date|roomId|AM`. Absent means
+  // available, so an untouched form generates slots exactly as before.
+  const [roomOut, setRoomOut] = useState<Record<string, boolean>>({});
+  const [roomGridOpen, setRoomGridOpen] = useState(false);
+
+  // Seeded from what is stored, not from what was last typed. Generating slots
+  // reloads the page, so local state alone lost every exclusion after the first
+  // day — and exclusions set in an earlier sitting would never have appeared.
+  const { data: roomUnavailData } = useQuery<any>(
+    ROOM_UNAVAILABILITY_QUERY,
+    eventId ? { eventId } : undefined,
+  );
+
+  useEffect(() => {
+    const rows = roomUnavailData?.roomUnavailability;
+    if (!rows) return;
+    const seeded: Record<string, boolean> = {};
+    for (const r of rows) {
+      const day = new Date(r.date).toISOString().split('T')[0];
+      seeded[`${day}|${r.roomId}|${r.session}`] = true;
+    }
+    setRoomOut(seeded);
+  }, [roomUnavailData]);
+
+  /**
+   * Saves immediately. The state is updated first so the box responds to the
+   * click, then reverted if the write fails — a control that looks like it
+   * worked and did not is the fault this replaces.
+   */
+  const toggleRoomOut = async (day: string, roomId: string, session: 'AM' | 'PM') => {
+    const key = `${day}|${roomId}|${session}`;
+    const next = !roomOut[key];
+    setRoomOut(prev => ({ ...prev, [key]: next }));
+
+    const ok = await run(SET_ROOM_AVAILABILITY, {
+      eventId, roomId, date: day, session, unavailable: next,
+    });
+
+    if (!ok) {
+      setRoomOut(prev => ({ ...prev, [key]: !next }));
+      show('Could not save room availability', 'err');
+    }
+  };
+
+  const outFor = (day: string) =>
+    Object.entries(roomOut)
+      .filter(([k, on]) => on && k.startsWith(`${day}|`))
+      .map(([k]) => {
+        const [, roomId, session] = k.split('|');
+        return { roomId, session };
+      });
+
+  const totalExcluded = Object.values(roomOut).filter(Boolean).length;
+
   const judgesWithAvailability = judges.filter((j: any) => (j.availability?.length ?? 0) > 0).length;
   const availabilityByDate = (() => {
     const counts = new Map<string, number>();
@@ -157,8 +227,26 @@ export default function EventSetupPage() {
   const sessionDuration = ef.sessionDurationMinutes || 20;
   const slotsPerRoom = judgingSlots;
   // Number of days the event runs, used to turn total slots into slots/day.
-  const evDayCount = Math.max(getEvDays(ef.startDate, ef.endDate).length, 1);
-  const roomSessionCapacity = judgingSlots * Math.max(rooms.length, 1);
+  const evDayCount = Math.max(eventDays.length, 1);
+  // Room-slots the scheduler can actually use. An excluded half-day removes that
+  // room from every slot in it, so a capacity computed as rooms × slots reports
+  // space that does not exist.
+  const slotsPerHalfDay = (day: string, half: 'AM' | 'PM') =>
+    timeSlots.filter((s: any) => {
+      if (s.slotType !== 'JUDGING' || slDS(s.date) !== day) return false;
+      const h = new Date(s.startTime).getUTCHours();
+      return (h < 4) === (half === 'AM');
+    }).length;
+
+  const excludedRoomSlots = Object.entries(roomOut)
+    .filter(([, on]) => on)
+    .reduce((sum, [key]) => {
+      const [day, , half] = key.split('|');
+      return sum + slotsPerHalfDay(day, half as 'AM' | 'PM');
+    }, 0);
+
+  const roomSessionCapacity =
+    judgingSlots * Math.max(rooms.length, 1) - excludedRoomSlots;
 
   const capacityWarnings: string[] = [];
   if (allReady) {
@@ -204,6 +292,22 @@ export default function EventSetupPage() {
 
   const [editingStep, setEditingStep] = useState<number|null>(null);
 
+  /**
+   * Which steps the coordinator has explicitly opened or closed.
+   *
+   * Absent means fall back to the rule: a finished step is collapsed, an
+   * unfinished one is open. So the page opens on the work that remains without
+   * anyone having to click, and a returning coordinator sees one section rather
+   * than eight.
+   */
+  const [stepOpen, setStepOpen] = useState<Record<number, boolean>>({});
+
+  const isStepOpen = (num: number, done: boolean) =>
+    stepOpen[num] !== undefined ? stepOpen[num] : !done;
+
+  const toggleStep = (num: number, done: boolean) =>
+    setStepOpen(prev => ({ ...prev, [num]: !isStepOpen(num, done) }));
+
   const stepStyle = (num: number, done: boolean, active: boolean, isEditing: boolean) => ({
     wrapper: { marginBottom: 16, opacity: active ? 1 : 0.35, pointerEvents: (active ? 'auto' : 'none') as any, transition: 'opacity 0.3s' },
     circle: { width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 as any,
@@ -212,8 +316,13 @@ export default function EventSetupPage() {
       border: `1.5px solid ${done ? 'rgba(16,185,129,0.3)' : active ? 'rgba(124,58,237,0.3)' : 'rgba(255,255,255,0.06)'}` },
     title: { fontSize: 15, fontWeight: 500, color: done ? '#10b981' : active ? '#fff' : '#6b7a90', flex: 1 },
     body: { marginLeft: 42, padding: '16px 20px', borderRadius: 12,
+      // Hidden rather than unmounted: the inputs inside keep their state, so
+      // collapsing a half-filled step and coming back to it loses nothing.
+      display: (isStepOpen(num, done) || isEditing) ? 'block' : 'none',
       border: `1px solid ${isEditing ? 'rgba(124,58,237,0.3)' : done ? 'rgba(16,185,129,0.15)' : active ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)'}`,
       background: isEditing ? 'rgba(124,58,237,0.03)' : 'rgba(255,255,255,0.02)' },
+    header: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10,
+      cursor: active ? 'pointer' : 'default' } as any,
   });
 
   return (
@@ -263,12 +372,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 1: Create Event ─── */}
       <div style={stepStyle(1, s1, true, editingStep === 1).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(1, s1, true, editingStep === 1).header}
+            onClick={() => { if (true) toggleStep(1, s1); }}>
           <div style={stepStyle(1, s1, true, editingStep === 1).circle}>{(s1 && editingStep !== 1) ? '\u2713' : 1}</div>
           <span style={stepStyle(1, s1, true, editingStep === 1).title}>Create event</span>
           {s1 && editingStep !== 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(1)}>Edit</button>}
           {editingStep === 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s1 && editingStep !== 1 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(1, s1) ? '\u25B4' : '\u25BE'}</span>
           {s1 && editingStep !== 1 && (
             <button className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
               onClick={() => {
@@ -300,6 +411,20 @@ export default function EventSetupPage() {
               <div><div className="lbl" style={{marginBottom:4}}>Start date</div><input type="date" className="inp" value={ef.startDate} onChange={e => setEf({...ef, startDate: e.target.value})} /></div>
               <div><div className="lbl" style={{marginBottom:4}}>End date</div><input type="date" className="inp" value={ef.endDate} onChange={e => setEf({...ef, endDate: e.target.value})} /></div>
             </div>
+            {weekendCount > 0 && (
+              <label style={{display:'flex',alignItems:'center',gap:8,marginTop:10,cursor:'pointer'}}>
+                <input type="checkbox" checked={skipWeekends}
+                  onChange={e => setSkipWeekends(e.target.checked)} />
+                <span style={{fontSize:13,color:'#b4c2d4'}}>
+                  Skip weekends
+                </span>
+                <span style={{fontSize:13,color:'#8ea3bc'}}>
+                  {skipWeekends
+                    ? `${weekendCount} weekend day(s) excluded — ${eventDays.length} judging day(s)`
+                    : `${allRangeDays.length} day(s) including weekends`}
+                </span>
+              </label>
+            )}
             <div><div className="lbl" style={{marginBottom:4,marginTop:10}}>Description</div><textarea className="inp" rows={2} value={ef.description} onChange={e => setEf({...ef, description: e.target.value})} /></div>
             <div className="fg" style={{marginTop:10}}>
               <div><div className="lbl" style={{marginBottom:4}}>Session duration (min)</div><input type="number" className="inp" value={ef.sessionDurationMinutes} onChange={e => setEf({...ef, sessionDurationMinutes: Number(e.target.value)})} /></div>
@@ -352,12 +477,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 2: Scoring Criteria ─── */}
       <div style={stepStyle(2, s2, s1, editingStep === 2).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(2, s2, s1, editingStep === 2).header}
+            onClick={() => { if (s1) toggleStep(2, s2); }}>
           <div style={stepStyle(2, s2, s1, editingStep === 2).circle}>{(s2 && editingStep !== 2) ? '\u2713' : 2}</div>
           <span style={stepStyle(2, s2, s1, editingStep === 2).title}>{`Scoring criteria (${criteria.length}) — ${totalPoints}/100 pts`}</span>
           {s2 && s1 && editingStep !== 2 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(2)}>Edit</button>}
           {editingStep === 2 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s2 && editingStep !== 2 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(2, s2) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(2, s2, s1, editingStep === 2).body}>
           <CriteriaBuilder
@@ -413,12 +540,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 3: Challenge Tracks ─── */}
       <div style={stepStyle(3, s3, s1 && s2, editingStep === 3).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(3, s3, s1 && s2, editingStep === 3).header}
+            onClick={() => { if (s1 && s2) toggleStep(3, s3); }}>
           <div style={stepStyle(3, s3, s1 && s2, editingStep === 3).circle}>{(s3 && editingStep !== 3) ? '\u2713' : 3}</div>
           <span style={stepStyle(3, s3, s1 && s2, editingStep === 3).title}>{`Challenge tracks (${tracks.length})`}</span>
           {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
           {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s3 && editingStep !== 3 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(3, s3) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(3, s3, s1 && s2, editingStep === 3).body}>
         {tracks.map(t => (
@@ -442,12 +571,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 4: Upload Teams ─── */}
       <div style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).header}
+            onClick={() => { if (s1 && s2 && s3) toggleStep(4, s4); }}>
           <div style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).circle}>{(s4 && editingStep !== 4) ? '\u2713' : 4}</div>
           <span style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).title}>{`Teams (${teams.length})`}</span>
           {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
           {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s4 && editingStep !== 4 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(4, s4) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).body}>
         {teams.length > 0 && (
@@ -498,12 +629,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 5: Upload Judges ─── */}
       <div style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).header}
+            onClick={() => { if (s1 && s2 && s3 && s4) toggleStep(5, s5); }}>
           <div style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).circle}>{(s5 && editingStep !== 5) ? '\u2713' : 5}</div>
           <span style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).title}>{`Judges (${judges.length})`}</span>
           {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
           {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s5 && editingStep !== 5 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(5, s5) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).body}>
         {judges.length > 0 && (
@@ -611,12 +744,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 6: Rooms ─── */}
       <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).header}
+            onClick={() => { if (s1 && s2 && s3 && s4 && s5) toggleStep(6, s6); }}>
           <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).circle}>{(s6 && editingStep !== 6) ? '\u2713' : 6}</div>
           <span style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).title}>{`Rooms (${rooms.length})`}</span>
           {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
           {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s6 && editingStep !== 6 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(6, s6) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).body}>
         {rooms.map(r => (
@@ -651,12 +786,14 @@ export default function EventSetupPage() {
 
       {/* ─── STEP 7: Time Slots ─── */}
       <div style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).wrapper}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).header}
+            onClick={() => { if (s1 && s2 && s3 && s4 && s5 && s6) toggleStep(7, s7); }}>
           <div style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).circle}>{(s7 && editingStep !== 7) ? '\u2713' : 7}</div>
           <span style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).title}>{`Time slots (${judgingSlots})`}</span>
           {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
           {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s7 && editingStep !== 7 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
+          <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(7, s7) ? '\u25B4' : '\u25BE'}</span>
         </div>
         <div style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).body}>
         {eventDays.length > 0 ? (
@@ -680,15 +817,108 @@ export default function EventSetupPage() {
                 <div style={{display:'flex',gap:6,alignItems:'center'}}><span className="lbl" style={{fontSize:12,minWidth:50}}>Hours</span><input type="time" className="inp" style={{width:90}} value={slotCfg.startTime} onChange={e => setSlotCfg({...slotCfg, startTime: e.target.value})} /><span style={{color:'#6b7a90'}}>to</span><input type="time" className="inp" style={{width:90}} value={slotCfg.endTime} onChange={e => setSlotCfg({...slotCfg, endTime: e.target.value})} /></div>
                 <div style={{display:'flex',gap:6,alignItems:'center'}}><span className="lbl" style={{fontSize:12,minWidth:50}}>Lunch</span><input type="time" className="inp" style={{width:90}} value={slotCfg.lunchStart} onChange={e => setSlotCfg({...slotCfg, lunchStart: e.target.value})} /><span style={{color:'#6b7a90'}}>to</span><input type="time" className="inp" style={{width:90}} value={slotCfg.lunchEnd} onChange={e => setSlotCfg({...slotCfg, lunchEnd: e.target.value})} /></div>
               </div>
+              {rooms.length > 0 && (
+                <div style={{marginTop:12,paddingTop:10,borderTop:'0.5px solid rgba(255,255,255,0.06)'}}>
+                  {/* Collapsed by default: nothing is excluded in the ordinary
+                      case, and a grid of empty boxes should not take a third of
+                      the section to say so. */}
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <button
+                      onClick={() => setRoomGridOpen(!roomGridOpen)}
+                      className="btn btn-sec btn-sm"
+                      style={{display:'flex',alignItems:'center',gap:6}}
+                    >
+                      <span>Room availability</span>
+                      <span style={{fontSize:11}}>{roomGridOpen ? '\u25B4' : '\u25BE'}</span>
+                    </button>
+                    <span style={{fontSize:13,color: totalExcluded > 0 ? '#f59e0b' : '#8ea3bc'}}>
+                      {totalExcluded > 0
+                        ? `${totalExcluded} half-day(s) excluded`
+                        : 'All rooms available on every day'}
+                    </span>
+                  </div>
+
+                  {roomGridOpen && (
+                    <div style={{marginTop:10,overflowX:'auto'}}>
+                      <div style={{fontSize:13,color:'#8ea3bc',marginBottom:8}}>
+                        Mark a room only when it is <em>not</em> available.
+                      </div>
+                      <table style={{borderCollapse:'collapse',fontSize:13}}>
+                        <thead>
+                          <tr>
+                            <th style={{textAlign:'left',padding:'4px 14px 8px 0',fontWeight:400,color:'#8ea3bc'}} />
+                            {rooms.map((r: any) => (
+                              <th key={r.id} colSpan={2}
+                                style={{textAlign:'center',padding:'4px 12px 8px',fontWeight:500,color:'#b4c2d4',
+                                        borderBottom:'0.5px solid rgba(255,255,255,0.08)'}}>
+                                {r.name}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {eventDays.map(day => {
+                            return (
+                              <tr key={day}>
+                                <td style={{padding:'5px 14px 5px 0',color:'#b4c2d4',whiteSpace:'nowrap'}}>
+                                  {fmt(day)}
+                                </td>
+                                {rooms.map((r: any) => (
+                                  (['AM','PM'] as const).map(sess => {
+                                    const out = !!roomOut[`${day}|${r.id}|${sess}`];
+                                    return (
+                                      <td key={r.id + sess} style={{padding:'5px 6px',textAlign:'center'}}>
+                                        <span
+                                          role="button"
+                                          title={out ? `${r.name} unavailable ${sess}` : `Mark ${r.name} unavailable ${sess}`}
+                                          onClick={() => toggleRoomOut(day, r.id, sess)}
+                                          style={{
+                                            display:'inline-flex',alignItems:'center',justifyContent:'center',
+                                            gap:4, cursor:'pointer', padding:'2px 8px', borderRadius:5,
+                                            minWidth:52,
+                                            border:`0.5px solid ${out ? 'rgba(239,68,68,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                                            background: out ? 'rgba(239,68,68,0.1)' : 'transparent',
+                                            color: out ? '#f87171' : '#8ea3bc',
+                                          }}
+                                        >
+                                          <span style={{fontSize:12,width:8,display:'inline-block'}}>
+                                            {out ? '\u00D7' : ''}
+                                          </span>
+                                          {sess}
+                                        </span>
+                                      </td>
+                                    );
+                                  })
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap'}}>
                 {eventDays.map(day => {
                   const existing = timeSlots.filter((s: any) => slDS(s.date) === day && s.slotType === 'JUDGING').length;
+                  const excluded = outFor(day);
+                  const daySlots = timeSlots.filter((s: any) => slDS(s.date) === day && s.slotType === 'JUDGING').length;
+                  const dayLost = excluded.reduce(
+                    (n: number, e: any) => n + slotsPerHalfDay(day, e.session as 'AM' | 'PM'), 0);
+                  const dayUsable = daySlots * Math.max(rooms.length, 1) - dayLost;
                   return (
                     <button key={day} className={`btn btn-sm ${existing > 0 ? 'btn-success' : 'btn-pri'}`} style={{flex:1}} onClick={async () => {
                       if (existing > 0 && !confirm(`${fmt(day)} already has ${existing} slots. Regenerate?`)) return;
                       const d = await run(GEN_SLOTS, { input: { eventId, date: day, operatingStart: slotCfg.startTime, operatingEnd: slotCfg.endTime, sessionDurationMinutes: slotCfg.session, breakDurationMinutes: slotCfg.brk, lunchStart: slotCfg.lunchStart, lunchEnd: slotCfg.lunchEnd } });
-                      if (d) { show(`${d.generateTimeSlots.length} slots for ${fmt(day)}`); reload(); }
-                    }}>{fmt(day)} {existing > 0 ? `(${existing})` : 'Generate'}</button>
+                      if (d) {
+                        show(excluded.length > 0
+                          ? `${d.generateTimeSlots.length} slots for ${fmt(day)} — ${excluded.length} room half-day(s) excluded`
+                          : `${d.generateTimeSlots.length} slots for ${fmt(day)}`);
+                        reload();
+                      }
+                    }}>{fmt(day)} {existing > 0 ? `(${existing})` : 'Generate'}{excluded.length > 0 ? ' ⚠' : ''}</button>
                   );
                 })}
               </div>

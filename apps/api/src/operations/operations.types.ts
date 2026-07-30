@@ -77,6 +77,12 @@ export class MarkAbsentInput {
 }
 
 @InputType()
+export class RemoveJudgeInput {
+  @Field() sessionId!: string;
+  @Field() judgeId!: string;
+}
+
+@InputType()
 export class CancelSessionInput {
   @Field() sessionId!: string;
   @Field() reason!: string;

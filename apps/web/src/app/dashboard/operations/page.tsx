@@ -104,6 +104,22 @@ export default function CommandCentrePage() {
     return res.data;
   };
 
+  /**
+   * Only offered when the session is above the event minimum — below it,
+   * taking a judge off would leave the team under-judged.
+   */
+  const removeJudgeFrom = async (sessionId: string, judgeId: string, judgeName: string) => {
+    if (!confirm(`Remove ${judgeName} from this session?`)) return;
+    const data = await run(`mutation R($input: RemoveJudgeInput!) {
+      removeJudge(input: $input) { success message warnings }
+    }`, { input: { sessionId, judgeId } });
+    if (data?.removeJudge) {
+      const r = data.removeJudge;
+      showMsg(r.warnings?.length ? `${r.message} — ${r.warnings.join('; ')}` : r.message);
+      setTimeout(() => window.location.reload(), 800);
+    }
+  };
+
   const updateStage = async (sessionId: string, stage: string) => {
     const data = await run(UPDATE_STAGE, { input: { sessionId, stage } });
     if (data) { showMsg(data.updateSessionStage.message); setTimeout(() => window.location.reload(), 800); }
@@ -460,6 +476,17 @@ export default function CommandCentrePage() {
                 <div key={j.judgeId} className="exp-judge">
                   <span className="exp-judge-name">{j.judgeName}</span>
                   <span className="exp-judge-type">{j.judgeType || ''}</span>
+                  {/* Only above the event minimum — below it, removing a judge
+                      would leave the team under-judged. */}
+                  {(s.judges?.length ?? 0) > (event?.minJudgesPerTeam ?? 3) && (
+                    <span
+                      role="button"
+                      title={`Remove ${j.judgeName}`}
+                      onClick={(e) => { e.stopPropagation(); removeJudgeFrom(s.id, j.judgeId, j.judgeName); }}
+                      style={{ marginLeft: 'auto', cursor: 'pointer', color: '#f87171',
+                               fontSize: 15, lineHeight: 1, padding: '0 4px' }}
+                    >&times;</span>
+                  )}
                 </div>
               ))}
               <span className="exp-add-judge" onClick={(e) => { e.stopPropagation(); findReplacements(s.id); }}>+ Add judge</span>

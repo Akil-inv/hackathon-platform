@@ -136,6 +136,7 @@ model Room {
   // equipment. Teams outside SG present remotely and need one of these.
   hasVideoConferencing Boolean   @default(false) @map("has_video_conferencing")
   status              RoomStatus @default(ACTIVE)
+  unavailability      RoomUnavailability[]
   createdAt           DateTime   @default(now()) @map("created_at")
   updatedAt           DateTime   @updatedAt @map("updated_at")
   deletedAt           DateTime?  @map("deleted_at")
@@ -155,6 +156,29 @@ enum SlotType {
   LUNCH
   CEREMONY
   BLOCKED
+}
+
+/// A half-day when a room cannot be used.
+///
+/// Stored sparsely: a room is available unless a row here says otherwise. That
+/// keeps existing events working untouched and means a coordinator records only
+/// the exceptions — the opposite default to judge availability, where silence
+/// has to mean unavailable because a judge nobody asked about must not be
+/// scheduled. A room is a fixed asset; it exists unless someone took it away.
+model RoomUnavailability {
+  id      String   @id @default(uuid()) @db.Uuid
+  roomId  String   @map("room_id") @db.Uuid
+  eventId String   @map("event_id") @db.Uuid
+  date    DateTime @db.Date
+  /// AM or PM. A whole day is two rows, which keeps the query simple.
+  session String
+  reason  String?
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, date, session])
+  @@index([eventId, date])
+  @@map("room_unavailability")
 }
 
 model TimeSlot {

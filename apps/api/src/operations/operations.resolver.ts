@@ -3,7 +3,7 @@ import { OperationsService } from './operations.service';
 import {
   OperationResult, ReplacementJudge, SessionHealthCheck,
   SwapJudgeInput, ChangeRoomInput, RescheduleInput, MarkAbsentInput,
-  AddJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput, SwapSessionsInput,
+  AddJudgeInput, RemoveJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput, SwapSessionsInput,
   OutstandingScoring, JudgeMessageEntity, MessageResult,
 } from './operations.types';
 import { Roles } from '../auth/roles.decorator';
@@ -86,6 +86,12 @@ export class OperationsResolver {
   }
 
   @Roles('ADMIN', 'COORDINATOR')
+  @Roles('ADMIN', 'COORDINATOR')
+  @Mutation(() => OperationResult)
+  async removeJudge(@Args('input') input: RemoveJudgeInput, @CurrentUser() user: any) {
+    return this.service.removeJudge(input, user?.sub || user?.id);
+  }
+
   @Roles('ADMIN', 'COORDINATOR')
   @Mutation(() => MessageResult)
   async messageJudges(

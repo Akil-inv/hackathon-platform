@@ -1,7 +1,7 @@
 import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
 import { RoomsService } from './rooms.service';
 import { TimeSlotsService } from './time-slots.service';
-import { RoomEntity, CreateRoomInput, UpdateRoomInput, TimeSlotEntity, GenerateTimeSlotsInput } from './rooms.types';
+import { RoomEntity, CreateRoomInput, UpdateRoomInput, TimeSlotEntity, GenerateTimeSlotsInput, RoomUnavailabilityEntity, OperationOk } from './rooms.types';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
@@ -61,6 +61,26 @@ export class RoomsResolver {
       where: { eventId, date: { gte: dateStart, lte: dateEnd } },
     });
     return true;
+  }
+
+  @Roles('ADMIN', 'COORDINATOR')
+  @Mutation(() => OperationOk)
+  async setRoomAvailability(
+    @Args('eventId') eventId: string,
+    @Args('roomId') roomId: string,
+    @Args('date') date: Date,
+    @Args('session') session: string,
+    @Args('unavailable') unavailable: boolean,
+    @CurrentUser() user: any,
+  ) {
+    return this.timeSlotsService.setRoomAvailability(
+      eventId, roomId, date, session, unavailable, user?.sub || user?.id,
+    );
+  }
+
+  @Query(() => [RoomUnavailabilityEntity])
+  async roomUnavailability(@Args('eventId') eventId: string) {
+    return this.timeSlotsService.unavailabilityByEvent(eventId);
   }
 
   @Query(() => [TimeSlotEntity])

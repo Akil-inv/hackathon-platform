@@ -38,6 +38,20 @@ export class UpdateRoomInput {
 }
 
 @ObjectType()
+export class OperationOk {
+  @Field() success!: boolean;
+}
+
+@ObjectType()
+export class RoomUnavailabilityEntity {
+  @Field() id!: string;
+  @Field() roomId!: string;
+  @Field() date!: Date;
+  @Field() session!: string;
+  @Field({ nullable: true }) reason?: string;
+}
+
+@ObjectType()
 export class TimeSlotEntity {
   @Field() id!: string;
   @Field() eventId!: string;
@@ -49,9 +63,21 @@ export class TimeSlotEntity {
 }
 
 @InputType()
+export class RoomHalfDayInput {
+  @Field() roomId!: string;
+  /// 'AM' or 'PM'.
+  @Field() session!: string;
+  @Field({ nullable: true }) reason?: string;
+}
+
+@InputType()
 export class GenerateTimeSlotsInput {
   @Field() eventId!: string;
   @Field() date!: Date;
+  /// Rooms that cannot be used for part of this day. Empty means all rooms are
+  /// available, which is the ordinary case.
+  @Field(() => [RoomHalfDayInput], { nullable: true })
+  unavailableRooms?: RoomHalfDayInput[];
   @Field() operatingStart!: string;
   @Field() operatingEnd!: string;
   @Field(() => Int) sessionDurationMinutes!: number;

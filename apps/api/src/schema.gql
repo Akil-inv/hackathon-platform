@@ -263,6 +263,7 @@ input GenerateTimeSlotsInput {
   operatingEnd: String!
   operatingStart: String!
   sessionDurationMinutes: Int!
+  unavailableRooms: [RoomHalfDayInput!]
 }
 
 """
@@ -408,6 +409,7 @@ type Mutation {
   register(input: RegisterInput!): UserResponse!
   removeCriterion(id: String!): Boolean!
   removeEventRole(eventId: String!, userId: String!): Boolean!
+  removeJudge(input: RemoveJudgeInput!): OperationResult!
   reopenScorecard(reason: String!, scorecardId: String!): ScorecardEntity!
   reorderCriteria(inputs: [ReorderCriterionInput!]!): Boolean!
   reorderTracks(inputs: [ReorderTrackInput!]!): [TrackEntity!]!
@@ -419,6 +421,7 @@ type Mutation {
   saveScorecardDraft(input: SaveScorecardInput!): ScorecardEntity!
   setJudgeAvailability(input: SetJudgeAvailabilityInput!): JudgeAvailabilityEntity!
   setJudgeExpertise(input: SetJudgeExpertiseInput!): JudgeExpertiseEntity!
+  setRoomAvailability(date: DateTime!, eventId: String!, roomId: String!, session: String!, unavailable: Boolean!): OperationOk!
   submitScorecard(input: SubmitScorecardInput!): ScorecardEntity!
   swapJudge(input: SwapJudgeInput!): OperationResult!
   swapRooms(input: SwapRoomsInput!): OperationResult!
@@ -439,6 +442,10 @@ type MyEvent {
   name: String!
   role: String!
   status: String!
+}
+
+type OperationOk {
+  success: Boolean!
 }
 
 type OperationResult {
@@ -485,6 +492,7 @@ type Query {
   outstandingScoring(eventId: String!): [OutstandingScoring!]!
   rankings(eventId: String!, trackId: String): RankingOutput
   room(id: String!): RoomEntity!
+  roomUnavailability(eventId: String!): [RoomUnavailabilityEntity!]!
   rooms(eventId: String!): [RoomEntity!]!
   scorecard(id: String!): ScorecardEntity!
   scorecardsByEvent(eventId: String!): [ScorecardEntity!]!
@@ -525,6 +533,11 @@ input RegisterInput {
   email: String!
   password: String!
   role: Role!
+}
+
+input RemoveJudgeInput {
+  judgeId: String!
+  sessionId: String!
 }
 
 input ReorderCriterionInput {
@@ -578,9 +591,23 @@ type RoomEntity {
   status: RoomStatus!
 }
 
+input RoomHalfDayInput {
+  reason: String
+  roomId: String!
+  session: String!
+}
+
 enum RoomStatus {
   ACTIVE
   UNAVAILABLE
+}
+
+type RoomUnavailabilityEntity {
+  date: DateTime!
+  id: String!
+  reason: String
+  roomId: String!
+  session: String!
 }
 
 input SaveScheduleInput {

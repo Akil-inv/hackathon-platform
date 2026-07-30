@@ -91,6 +91,28 @@ export class SchedulingService {
     const unavailable = judges.filter(j => j.availability.length === 0);
     const schedulable = judges.filter(j => j.availability.length > 0);
 
+    // A room booked for something else cannot host a session, so those
+    // room-slot pairs are excluded before the solve rather than discovered on
+    // the day. Lunch divides the halves: a morning exclusion runs to noon.
+    const exclusions = await this.prisma.roomUnavailability.findMany({
+      where: { eventId },
+    });
+
+    const blockedRoomSlots: Array<{ room_id: string; slot_id: string }> = [];
+    for (const ex of exclusions) {
+      const exDate = new Date(ex.date).toISOString().split('T')[0];
+      for (const slot of slots) {
+        const slotDate = new Date(slot.date).toISOString().split('T')[0];
+        if (slotDate !== exDate) continue;
+        const hour = new Date(slot.startTime).getUTCHours();
+        // Slots are stored in UTC; Singapore noon is 04:00 UTC.
+        const isMorning = hour < 4;
+        if ((ex.session === 'AM') === isMorning) {
+          blockedRoomSlots.push({ room_id: ex.roomId, slot_id: slot.id });
+        }
+      }
+    }
+
     // Map judge availability to slot IDs
     const judgeInputs = schedulable.map(j => {
       const availSlotIds = slots
@@ -176,6 +198,10 @@ export class SchedulingService {
         end_time: s.endTime.toISOString(),
       })),
       rooms: rooms.map(r => ({ id: r.id, name: r.name })),
+      // Room-slot pairs the solver may not use. Rides on the same mechanism as
+      // locked sessions, so no new constraint is needed — a blocked room is
+      // simply one that is already occupied.
+      blocked_room_slots: blockedRoomSlots,
       min_judges_per_team: minJudges,
       max_judges_per_team: maxJudges,
       locked_sessions: lockedSessions,

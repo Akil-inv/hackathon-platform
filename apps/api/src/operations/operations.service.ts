@@ -4,7 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
 import {
   SwapJudgeInput, ChangeRoomInput, RescheduleInput, MarkAbsentInput,
-  AddJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput,
+  AddJudgeInput, RemoveJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput,
 } from './operations.types';
 
 @Injectable()
@@ -278,6 +278,78 @@ export class OperationsService {
     });
 
     return { success: true, message: `Added ${judge.name} to ${session.team.name}`, warnings: [] };
+  }
+
+  /**
+   * Take a judge off a session.
+   *
+   * Refused below the event minimum: a coordinator under pressure should not be
+   * able to leave a team under-judged with one click. Refused too if the judge
+   * has submitted — that scorecard is evidence, and losing a score to tidy up a
+   * panel is not a trade worth offering. A draft or unstarted card goes with
+   * them, since neither is worth keeping.
+   */
+  async removeJudge(input: RemoveJudgeInput, userId: string) {
+    const session = await this.getSessionFull(input.sessionId);
+    this.assertEditable(session);
+
+    // Stricter than adding, deliberately. An extra judge in a running session is
+    // recoverable; taking one out is not — the team has already presented to
+    // them, and a partial judgement of something nobody can re-watch is not
+    // something to discard on a click. A judge who has to leave mid-session is
+    // marked absent instead, which preserves the record.
+    if (session.stage !== 'SCHEDULED') {
+      throw new BadRequestException(
+        `This session is ${session.stage.toLowerCase().replace('_', ' ')}. ` +
+        'Judges cannot be removed once a session has started — mark them absent instead.',
+      );
+    }
+
+    const event = await this.prisma.event.findUnique({ where: { id: session.eventId } });
+    const minimum = event?.minJudgesPerTeam ?? 3;
+
+    if (session.judges.length <= minimum) {
+      throw new BadRequestException(
+        `This session has ${session.judges.length} judge(s) and the event minimum is ${minimum}. ` +
+        'Swap the judge instead, or raise the minimum.',
+      );
+    }
+
+    const assignment = session.judges.find((sj: any) => sj.judgeId === input.judgeId);
+    if (!assignment) throw new NotFoundException('That judge is not on this session');
+
+    const scorecard = session.scorecards.find((sc: any) => sc.judgeId === input.judgeId);
+    if (scorecard && ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(scorecard.status)) {
+      throw new BadRequestException(
+        `${assignment.judge?.name ?? 'That judge'} has already submitted a score. ` +
+        'Reopen and withdraw it first if it should not count.',
+      );
+    }
+
+    const warnings: string[] = [];
+    if (scorecard?.status === 'DRAFT') {
+      warnings.push('A draft scorecard was discarded with the judge');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (scorecard) {
+        await tx.criterionScore.deleteMany({ where: { scorecardId: scorecard.id } });
+        await tx.scorecard.delete({ where: { id: scorecard.id } });
+      }
+      await tx.sessionJudge.delete({ where: { id: assignment.id } });
+    });
+
+    await this.audit.log({
+      userId, eventId: session.eventId,
+      action: AuditAction.UPDATE, entityType: 'JudgingSession', entityId: session.id,
+      newValues: { removedJudge: input.judgeId, remaining: session.judges.length - 1 },
+    });
+
+    return {
+      success: true,
+      message: `Removed ${assignment.judge?.name ?? 'judge'} from ${session.team.name}`,
+      warnings,
+    };
   }
 
   // ─── CANCEL SESSION ───

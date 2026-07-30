@@ -42,6 +42,10 @@ export class TimeSlotsService {
   async generate(input: GenerateTimeSlotsInput, userId: string) {
     const { eventId, date, operatingStart, operatingEnd, sessionDurationMinutes, breakDurationMinutes, lunchStart, lunchEnd } = input;
 
+    // Room availability is deliberately not touched here. It is a property of a
+    // room and a date, edited on its own, and regenerating a day should not
+    // silently discard it.
+
     // Fetch event timezone
     const event = await this.prisma.event.findUnique({ where: { id: eventId }, select: { timezone: true } });
     const timezone = event?.timezone || 'Asia/Singapore';
@@ -141,6 +145,53 @@ export class TimeSlotsService {
     return this.prisma.timeSlot.findMany({
       where: { eventId, date },
       orderBy: { startTime: 'asc' },
+    });
+  }
+
+  /**
+   * Mark a room available or not for one half-day.
+   *
+   * Independent of slot generation. Availability is a property of a room and a
+   * date; tying it to generation meant a coordinator could only change it by
+   * regenerating, and any edit made afterwards was silently lost.
+   */
+  async setRoomAvailability(
+    eventId: string,
+    roomId: string,
+    date: Date,
+    session: string,
+    unavailable: boolean,
+    userId: string,
+  ) {
+    const day = new Date(new Date(date).toISOString().split('T')[0]);
+    const sess = session.toUpperCase() === 'PM' ? 'PM' : 'AM';
+
+    if (unavailable) {
+      await this.prisma.roomUnavailability.upsert({
+        where: { roomId_date_session: { roomId, date: day, session: sess } },
+        create: { roomId, eventId, date: day, session: sess },
+        update: {},
+      });
+    } else {
+      await this.prisma.roomUnavailability.deleteMany({
+        where: { roomId, date: day, session: sess },
+      });
+    }
+
+    await this.audit.log({
+      userId, eventId,
+      action: AuditAction.UPDATE, entityType: 'Room', entityId: roomId,
+      newValues: { date: day.toISOString().split('T')[0], session: sess, unavailable },
+    });
+
+    return { success: true };
+  }
+
+  /** What is stored, so the form can show it rather than the last thing typed. */
+  async unavailabilityByEvent(eventId: string) {
+    return this.prisma.roomUnavailability.findMany({
+      where: { eventId },
+      orderBy: [{ date: 'asc' }, { session: 'asc' }],
     });
   }
 

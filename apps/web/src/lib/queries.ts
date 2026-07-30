@@ -7,6 +7,18 @@ export const LOGIN_MUTATION = `
 export const ME_QUERY = `query { me { id email role } }`;
 export const EVENTS_QUERY = `query { events { id name description location timezone startDate endDate status sessionDurationMinutes minJudgesPerTeam maxJudgesPerTeam } }`;
 
+export const SET_ROOM_AVAILABILITY = `
+  mutation SetRoomAvailability($eventId: String!, $roomId: String!, $date: DateTime!, $session: String!, $unavailable: Boolean!) {
+    setRoomAvailability(eventId: $eventId, roomId: $roomId, date: $date, session: $session, unavailable: $unavailable) { success }
+  }
+`;
+
+export const ROOM_UNAVAILABILITY_QUERY = `
+  query RoomUnavailability($eventId: String!) {
+    roomUnavailability(eventId: $eventId) { id roomId date session }
+  }
+`;
+
 export const TEAMS_QUERY = `
   query Teams($eventId: String!) {
     teams(eventId: $eventId) { id name projectName trackName teamLeadName teamLeadEmail status organisation techStack platform country useCaseTitle createdAt }

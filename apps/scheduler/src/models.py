@@ -72,6 +72,10 @@ class ScheduleRequest(BaseModel):
     # Rooms this pass may use. Empty means any room. Set when remote teams must
     # go in a room with video conferencing.
     restrict_to_room_ids: list[str] = []
+    # Room-slot pairs that cannot be used — a room booked for something else.
+    # Shaped as dicts rather than tuples so the JSON stays readable when a
+    # schedule needs debugging.
+    blocked_room_slots: list[dict] = []
     # Prefer placing this pass's teams in adjacent slots, so a vendor attending
     # half a day sees a contiguous block rather than scattered sessions. Slots
     # are ordered date-then-time, so this is measured within a day — index

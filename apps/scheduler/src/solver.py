@@ -54,6 +54,16 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
         r_i = room_idx.get(ls.room_id)
         if s_i is not None and r_i is not None:
             occupied_room_slots.add((s_i, r_i))
+
+    # A room that is unavailable is, to the solver, a room that is already
+    # occupied. Folding the two together means capacity reporting, infeasibility
+    # messages and clustering all treat them identically, with no special case
+    # to keep in step.
+    for blocked in getattr(req, 'blocked_room_slots', []) or []:
+        r_i = room_idx.get(blocked.get('room_id'))
+        s_i = slot_idx.get(blocked.get('slot_id'))
+        if r_i is not None and s_i is not None:
+            occupied_room_slots.add((s_i, r_i))
         for jid in ls.judge_ids:
             j_i = judge_idx.get(jid)
             if j_i is None:
