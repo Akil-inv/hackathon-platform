@@ -55,15 +55,6 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
         if s_i is not None and r_i is not None:
             occupied_room_slots.add((s_i, r_i))
 
-    # A room that is unavailable is, to the solver, a room that is already
-    # occupied. Folding the two together means capacity reporting, infeasibility
-    # messages and clustering all treat them identically, with no special case
-    # to keep in step.
-    for blocked in getattr(req, 'blocked_room_slots', []) or []:
-        r_i = room_idx.get(blocked.get('room_id'))
-        s_i = slot_idx.get(blocked.get('slot_id'))
-        if r_i is not None and s_i is not None:
-            occupied_room_slots.add((s_i, r_i))
         for jid in ls.judge_ids:
             j_i = judge_idx.get(jid)
             if j_i is None:
@@ -71,6 +62,16 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
             prior_judge_load[j_i] += 1
             if s_i is not None:
                 busy_judge_slots.add((j_i, s_i))
+
+    # A room that is unavailable is, to the solver, a room that is already
+    # occupied. Folding the two together means capacity reporting, infeasibility
+    # messages and clustering all treat them identically, with no special case
+    # to keep in step.
+    for blocked in getattr(req, 'blocked_room_slots', []) or []:
+        b_r = room_idx.get(blocked.get('room_id'))
+        b_s = slot_idx.get(blocked.get('slot_id'))
+        if b_r is not None and b_s is not None:
+            occupied_room_slots.add((b_s, b_r))
 
     # ─── Anchors ───
     # Anchors are decided before the solve: an L2 in each room for the day,

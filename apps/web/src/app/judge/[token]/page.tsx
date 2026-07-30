@@ -152,6 +152,35 @@ export default function JudgePortalPage() {
         </div>
       </div>
 
+      {/* A message a judge can only see on one screen is a message that gets
+          missed, so it floats above everything — including an open scorecard,
+          which is where they spend most of their time. */}
+      {schedule?.message && (
+        <div className="fixed inset-x-0 bottom-0 z-[70] p-3 sm:p-4">
+          <div className="mx-auto flex max-w-3xl items-start gap-3 rounded-2xl border border-slate-300 bg-white p-4 shadow-2xl">
+            <div className="min-w-0 flex-1">
+              {/* Wraps to as many lines as it needs. The previous version
+                  truncated, which lost the half of the sentence that mattered. */}
+              <p className="text-base leading-relaxed text-slate-900 break-words">
+                {schedule.message.body}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">— {schedule.message.sentByName}</p>
+            </div>
+            <button
+              onClick={async () => {
+                await fetch(`${apiUrl}/api/judge-portal/${token}/dismiss-message?event=${eventId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ messageId: schedule.message.id }),
+                });
+                fetchData();
+              }}
+              className="shrink-0 rounded-xl bg-slate-900 px-5 py-2.5 text-base font-medium text-white hover:bg-slate-800"
+            >Got it</button>
+          </div>
+        </div>
+      )}
+
       {infoSessionId && (() => {
         const s = sessions.find((x: any) => x.sessionId === infoSessionId);
         if (!s) return null;
@@ -175,7 +204,9 @@ export default function JudgePortalPage() {
         );
       })()}
 
-      <div className={`w-full max-w-5xl mx-auto px-4 py-5 sm:px-6 sm:py-8 ${
+      <div
+        style={schedule?.message ? { paddingBottom: 132 } : undefined}
+        className={`w-full max-w-5xl mx-auto px-4 py-5 sm:px-6 sm:py-8 ${
         activeScorecard ? '' : 'flex-1 flex flex-col'
       }`}>
         {/* Scoring form overlay */}
@@ -376,29 +407,7 @@ export default function JudgePortalPage() {
           <QuadrantView
             sessions={sessions}
             onInfo={(sessionId: string) => setInfoSessionId(sessionId)}
-            footer={schedule?.message ? (
-              <div className="flex items-center gap-3">
-                {/* Scrolls only when it will not fit. Perpetual motion at the
-                    bottom of a screen someone watches all day is irritating. */}
-                <div className="min-w-0 flex-1 overflow-hidden">
-                  <p className="truncate text-base text-slate-900">
-                    {schedule.message.body}
-                    <span className="ml-2 text-sm text-slate-500">— {schedule.message.sentByName}</span>
-                  </p>
-                </div>
-                <button
-                  onClick={async () => {
-                    await fetch(`${apiUrl}/api/judge-portal/${token}/dismiss-message?event=${eventId}`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ messageId: schedule.message.id }),
-                    });
-                    fetchData();
-                  }}
-                  className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                >Got it</button>
-              </div>
-            ) : undefined}
+
             scorecards={scorecards}
             onScore={(sessionId: string) => {
               const sc = scorecards.find((c: any) => c.sessionId === sessionId);
