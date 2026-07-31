@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
+import { halfDayWindow, eventTimezone } from '../common/event-time';
 import { CreateJudgeInput, UpdateJudgeInput, SetJudgeAvailabilityInput, SetJudgeExpertiseInput } from './judges.types';
 
 @Injectable()
@@ -239,13 +240,17 @@ export class JudgesService {
     });
     const byEmail = new Map(judges.map(j => [j.email.toLowerCase(), j]));
 
-    // Half-day windows. Lunch sits between them, so a judge available for the
-    // morning is free until 12:00 and an afternoon judge from 13:00.
-    const WINDOWS: Record<string, Array<[string, string]>> = {
-      AM: [['00:00', '12:00']],
-      PM: [['13:00', '23:59']],
-      BOTH: [['00:00', '23:59']],
-    };
+    // Half-day windows in the event's timezone, not the server's and not UTC.
+    //
+    // The previous version stored AM as 00:00-12:00 UTC. For a Singapore event
+    // that is 08:00-20:00 local, so every morning slot matched — and PM, stored
+    // as 13:00-23:59 UTC, was 21:00-07:59 local and matched nothing at all. A
+    // judge who said they were free in the afternoon was silently unschedulable.
+    const eventRecord = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { timezone: true },
+    });
+    const tz = eventTimezone(eventRecord);
 
     // A re-import replaces rather than merges.
     await this.prisma.judgeAvailability.deleteMany({
@@ -277,7 +282,7 @@ export class JudgesService {
       }
 
       const session = (row.session || 'BOTH').trim().toUpperCase();
-      if (!WINDOWS[session]) {
+      if (!['AM', 'PM', 'BOTH'].includes(session)) {
         errors.push({ row: rowNum, field: 'session', message: `"${row.session}" is not AM, PM or BOTH` });
         continue;
       }
@@ -290,22 +295,15 @@ export class JudgesService {
       seen.add(key);
 
       try {
-        for (const [start, end] of WINDOWS[session]) {
-          const toTime = (t: string) => {
-            const [h, m] = t.split(':').map(Number);
-            const d = new Date(`${dateStr}T00:00:00.000Z`);
-            d.setUTCHours(h, m, 0, 0);
-            return d;
-          };
-          await this.prisma.judgeAvailability.create({
-            data: {
-              judgeId: judge.id,
-              date,
-              startTime: toTime(start),
-              endTime: toTime(end),
-            },
-          });
-        }
+        const window = halfDayWindow(dateStr, session as 'AM' | 'PM' | 'BOTH', tz);
+        await this.prisma.judgeAvailability.create({
+          data: {
+            judgeId: judge.id,
+            date,
+            startTime: window.start,
+            endTime: window.end,
+          },
+        });
         imported++;
       } catch (e: any) {
         errors.push({ row: rowNum, field: 'general', message: e.message?.substring(0, 100) || 'Unknown error' });

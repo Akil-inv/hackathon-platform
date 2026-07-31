@@ -27,7 +27,14 @@ const UPDATE_CRITERION = `mutation UC($id: String!, $input: UpdateCriterionInput
 const LOAD_RUBRIC = `mutation LR($eventId: String!) { loadStandardRubric(eventId: $eventId) { categoriesCreated rowsCreated } }`;
 const DELETE_CRITERION = `mutation DC($id: String!) { removeCriterion(id: $id) }`;
 
-const TZ = 'Asia/Singapore';
+// Falls back to Singapore, not UTC. The schema default of 'UTC' was never a
+// considered choice — an event that genuinely runs on UTC will say so.
+const DEFAULT_TZ = 'Asia/Singapore';
+
+// Module-level date helpers cannot see the loaded event, so they format in the
+// default. That is display only; anything that decides AM from PM uses the
+// event's own timezone below, where being wrong would change a schedule.
+const TZ = DEFAULT_TZ;
 const fmt = (s: string, o?: any) => { if (!s) return '-'; return new Date(s.length === 10 ? s + 'T00:00:00+08:00' : s).toLocaleDateString('en-SG', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short', ...o }); };
 const toDS = (s: string) => { if (!s) return ''; return new Date(s).toLocaleDateString('en-CA', { timeZone: TZ }); };
 const getEvDays = (a: string, b: string) => { if (!a || !b) return []; const d: string[] = []; const s = new Date(a+'T00:00:00+08:00'); const e = new Date(b+'T00:00:00+08:00'); for (let x = new Date(s); x <= e; x.setTime(x.getTime()+86400000)) d.push(x.toLocaleDateString('en-CA',{timeZone:TZ})); return d; };
@@ -125,6 +132,7 @@ export default function EventSetupPage() {
   // running one that does not will find the toggle beside the dates.
   const [skipWeekends, setSkipWeekends] = useState(true);
 
+  const eventTz = (event?.timezone && event.timezone !== 'UTC') ? event.timezone : DEFAULT_TZ;
   const allRangeDays = getEvDays(ef.startDate, ef.endDate);
   const weekendCount = allRangeDays.length - dropWeekends(allRangeDays).length;
   const eventDays = skipWeekends ? dropWeekends(allRangeDays) : allRangeDays;
@@ -234,8 +242,10 @@ export default function EventSetupPage() {
   const slotsPerHalfDay = (day: string, half: 'AM' | 'PM') =>
     timeSlots.filter((s: any) => {
       if (s.slotType !== 'JUDGING' || slDS(s.date) !== day) return false;
-      const h = new Date(s.startTime).getUTCHours();
-      return (h < 4) === (half === 'AM');
+      const h = parseInt(new Intl.DateTimeFormat('en-GB', {
+        timeZone: eventTz, hour: '2-digit', hour12: false,
+      }).format(new Date(s.startTime)), 10);
+      return (h < 12) === (half === 'AM');
     }).length;
 
   const excludedRoomSlots = Object.entries(roomOut)

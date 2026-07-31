@@ -4,7 +4,7 @@ import {
   ScoringTemplateEntity, ScoringCriterionEntity,
   CreateScoringTemplateInput, UpdateScoringTemplateInput,
   AddCriterionInput, UpdateCriterionInput, ReorderCriterionInput,
-  LoadRubricResult,
+  LoadRubricResult, ScoringLockState,
 } from './scoring-templates.types';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -43,6 +43,12 @@ export class ScoringTemplatesResolver {
   }
 
   @Roles('SUPER_ADMIN', 'ADMIN')
+  /** So the setup page can grey the editor out rather than let someone try. */
+  @Query(() => ScoringLockState)
+  async scoringLockState(@Args('eventId') eventId: string) {
+    return this.service.lockState(eventId);
+  }
+
   @Mutation(() => LoadRubricResult)
   async loadStandardRubric(
     @Args('eventId') eventId: string,

@@ -26,6 +26,12 @@ export default function JudgePortalPage() {
   const [recommendation, setRecommendation] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  // Whether there is unsaved work, and when it was last written. Both are shown
+  // to the judge — a scorecard that says nothing about its state invites the
+  // assumption that it saved.
+  const [dirty, setDirty] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [recovered, setRecovered] = useState(false);
 
   const apiUrl = typeof window !== 'undefined' ? window.location.origin.replace(':3000', ':4000') : '';
 
@@ -47,11 +53,13 @@ export default function JudgePortalPage() {
   };
 
   useEffect(() => { fetchData(); }, [token, eventId]);
+  // Suspended while a scorecard is open. A background refetch of the very card
+  // a judge is filling in is a data-loss bug waiting for the right refactor.
   useEffect(() => {
-    if (!token || !eventId) return;
+    if (!token || !eventId || activeScorecard) return;
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, [token, eventId]);
+  }, [token, eventId, activeScorecard]);
 
   const openScorecard = (sc: any) => {
     setActiveScorecard(sc);
@@ -59,6 +67,24 @@ export default function JudgePortalPage() {
     sc.criterionScores?.forEach((cs: any) => {
       scoreMap[cs.criterionId] = { score: cs.score, comment: cs.comment || '' };
     });
+    // Anything newer than what the server holds is offered back rather than
+    // silently discarded or silently applied — the judge decides.
+    let restored = false;
+    try {
+      const raw = sessionStorage.getItem(draftKey(sc.id));
+      if (raw) {
+        // The key exists only when there is unsaved work — it is written on
+        // change and removed on every successful save. Its presence is the
+        // signal; no timestamp comparison is needed.
+        const saved = JSON.parse(raw);
+        Object.assign(scoreMap, saved.scores || {});
+        restored = true;
+      }
+    } catch { /* nothing to recover */ }
+
+    setRecovered(restored);
+    setDirty(false);
+    setLastSaved(null);
     setScores(scoreMap);
     setStrengths(sc.overallStrengths || '');
     setImprovements(sc.areasForImprovement || '');
@@ -66,8 +92,58 @@ export default function JudgePortalPage() {
     setMessage('');
   };
 
-  const saveOrSubmit = async (submit: boolean) => {
+  /** Where unsaved work is mirrored, per scorecard. */
+  const draftKey = (id: string) => `hackjudge-draft-${id}`;
+
+  // Mirror every change locally before the network is involved. If the tab is
+  // reclaimed between autosaves this is what survives.
+  useEffect(() => {
+    if (!activeScorecard || !dirty) return;
+    try {
+      sessionStorage.setItem(draftKey(activeScorecard.id), JSON.stringify({
+        scores, strengths, improvements, recommendation, at: Date.now(),
+      }));
+    } catch { /* private browsing, quota — the autosave still covers it */ }
+  }, [scores, strengths, improvements, recommendation, dirty, activeScorecard]);
+
+  // Autosave twenty seconds after the last change. Long enough not to fight the
+  // judge mid-sentence, short enough that little is at stake.
+  useEffect(() => {
+    if (!activeScorecard || !dirty || saving) return;
+    const t = setTimeout(() => { saveOrSubmit(false, true); }, 20000);
+    return () => clearTimeout(t);
+  }, [scores, strengths, improvements, recommendation, dirty, activeScorecard, saving]);
+
+  // And immediately when the page is hidden. On a phone this fires when the
+  // screen locks or the judge switches app — precisely when the tab is most
+  // likely to be evicted.
+  useEffect(() => {
     if (!activeScorecard) return;
+    const onHide = () => {
+      if (document.visibilityState === 'hidden' && dirty) {
+        saveOrSubmit(false, true);
+      }
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [activeScorecard, dirty, scores, strengths, improvements, recommendation]);
+
+  // A last line of defence for a deliberate close with work outstanding.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirty) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  const saveOrSubmit = async (submit: boolean, auto = false) => {
+    if (!activeScorecard) return;
+    if (auto && !dirty) return;
     setSaving(true);
     try {
       const body = {
@@ -87,9 +163,15 @@ export default function JudgePortalPage() {
       });
       const data = await res.json();
       if (data.error || data.message?.startsWith('Error') || !res.ok) {
-        setMessage(data.message || data.error || 'Error saving');
+        // An autosave that fails must not be silent — the judge would carry on
+        // believing their work was safe.
+        setMessage(data.message || data.error ||
+          (auto ? 'Autosave failed — press Save draft' : 'Error saving'));
       } else {
-        setMessage(submit ? 'Scorecard submitted!' : 'Draft saved');
+        setDirty(false);
+        setLastSaved(new Date());
+        try { sessionStorage.removeItem(draftKey(activeScorecard.id)); } catch {}
+        setMessage(submit ? 'Scorecard submitted!' : auto ? '' : 'Draft saved');
         if (submit) {
           setActiveScorecard(null);
           fetchData();
@@ -212,6 +294,13 @@ export default function JudgePortalPage() {
         {/* Scoring form overlay */}
         {activeScorecard && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f4f6fa] p-4 sm:static sm:z-auto sm:overflow-visible sm:mb-6 sm:rounded-xl sm:border sm:border-slate-300 sm:bg-white sm:p-6">
+            {recovered && (
+              <div className="mb-3 rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3">
+                <p className="text-base text-amber-900">
+                  Unsaved work from this device was restored. Check it, then save.
+                </p>
+              </div>
+            )}
             <div className="flex items-start justify-between mb-4 gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Score: {activeScorecard.teamName}</h2>
@@ -310,10 +399,10 @@ export default function JudgePortalPage() {
                     <div className="flex items-center gap-4 mb-2">
                       <input type="range" min="0" max={cs.maxScore} step="1" value={s.score ?? 0} disabled={isLocked}
                       style={{ height: 28 }}
-                        onChange={(e) => setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: parseInt(e.target.value) } }))}
+                        onChange={(e) => { setDirty(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: parseInt(e.target.value) } })); }}
                         className="flex-1 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#7c3aed] disabled:opacity-50" />
                       <input type="number" min="0" max={cs.maxScore} value={s.score ?? ''} disabled={isLocked}
-                        onChange={(e) => setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.min(parseInt(e.target.value) || 0, cs.maxScore) } }))}
+                        onChange={(e) => { setDirty(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.min(parseInt(e.target.value) || 0, cs.maxScore) } })); }}
                         className="w-16 bg-[#f4f6fa] border border-slate-300 rounded-lg px-3 py-1.5 text-center text-base font-mono text-slate-900 outline-none disabled:opacity-50" />
                       <span className="text-sm text-slate-500">/ {cs.maxScore}</span>
                     </div>
@@ -339,7 +428,7 @@ export default function JudgePortalPage() {
                     )}
 
                     <textarea value={s.comment || ''} disabled={isLocked}
-                      onChange={(e) => setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], comment: e.target.value } }))}
+                      onChange={(e) => { setDirty(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], comment: e.target.value } })); }}
                       placeholder={cs.requiresComment ? 'Why this score? Required.' : 'Optional comment...'}
                       rows={2}
                       className={`w-full bg-slate-50 rounded-lg px-4 py-3 text-base text-slate-900 placeholder-slate-500 outline-none resize-none disabled:opacity-50 border-2 focus:bg-white ${
@@ -359,10 +448,10 @@ export default function JudgePortalPage() {
               {/* Overall assessment */}
               <div className="rounded-xl border border-slate-200 bg-[#f4f6fa] p-4 space-y-3">
                 <h3 className="text-base font-semibold text-slate-900">Overall assessment</h3>
-                <textarea value={strengths} onChange={(e) => setStrengths(e.target.value)} placeholder="Strengths..." rows={2}
+                <textarea value={strengths} onChange={(e) => { setDirty(true); setStrengths(e.target.value); }} placeholder="Strengths..." rows={2}
                   disabled={['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status)}
                   className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-base text-slate-900 placeholder-slate-500 outline-none resize-none disabled:opacity-50 focus:bg-white focus:border-slate-400" />
-                <textarea value={improvements} onChange={(e) => setImprovements(e.target.value)} placeholder="Areas for improvement..." rows={2}
+                <textarea value={improvements} onChange={(e) => { setDirty(true); setImprovements(e.target.value); }} placeholder="Areas for improvement..." rows={2}
                   disabled={['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status)}
                   className="w-full bg-slate-50 border-2 border-slate-200 rounded-lg px-4 py-3 text-base text-slate-900 placeholder-slate-500 outline-none resize-none disabled:opacity-50 focus:bg-white focus:border-slate-400" />
               </div>

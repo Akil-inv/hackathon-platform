@@ -97,11 +97,90 @@ export class ScoringTemplatesService {
    * getting the totals to balance by hand is fiddly. Everything created here
    * is ordinary data — rename it, reweight it, delete it.
    */
+  /**
+   * Refuse structural changes once any judge has submitted.
+   *
+   * A submitted score was measured against a definition. Change the definition
+   * afterwards and the score means something different, with nothing recording
+   * that it happened — the worst kind of data problem, because it is invisible.
+   *
+   * Deliberately triggered by submission rather than by the schedule existing.
+   * A rubric and a schedule are independent; a coordinator fixing a typo the day
+   * after generating the schedule is doing nothing wrong, and a lock that fires
+   * then only teaches people to work around it.
+   */
+  private async assertNotScoring(templateId: string, what: string) {
+    const template = await this.prisma.scoringTemplate.findUnique({
+      where: { id: templateId },
+      select: { eventId: true },
+    });
+    if (!template) return;
+
+    const submitted = await this.prisma.scorecard.count({
+      where: {
+        eventId: template.eventId,
+        status: { in: ['SUBMITTED', 'RESUBMITTED', 'LOCKED'] },
+      },
+    });
+
+    if (submitted > 0) {
+      throw new BadRequestException(
+        `${what} cannot be changed — ${submitted} scorecard(s) have already been ` +
+        'submitted against this rubric. Changing it now would silently alter what ' +
+        'those scores mean. Names and descriptions can still be corrected.',
+      );
+    }
+  }
+
+  /**
+   * Give existing scorecards a row for a newly added criterion.
+   *
+   * Between the schedule being built and the first submission, scorecards exist
+   * with a fixed set of rows. Adding a criterion without this leaves them one
+   * row short, and a judge would score eleven of twelve without being told.
+   */
+  private async backfillCriterion(templateId: string, criterionId: string) {
+    const template = await this.prisma.scoringTemplate.findUnique({
+      where: { id: templateId },
+      select: { eventId: true },
+    });
+    if (!template) return;
+
+    const scorecards = await this.prisma.scorecard.findMany({
+      where: { eventId: template.eventId },
+      select: { id: true },
+    });
+
+    for (const sc of scorecards) {
+      await this.prisma.criterionScore.upsert({
+        where: { scorecardId_criterionId: { scorecardId: sc.id, criterionId } },
+        create: { scorecardId: sc.id, criterionId },
+        update: {},
+      });
+    }
+
+    return scorecards.length;
+  }
+
+  /** Whether the rubric is closed to structural change, and why. */
+  async lockState(eventId: string) {
+    const submittedCount = await this.prisma.scorecard.count({
+      where: {
+        eventId,
+        status: { in: ['SUBMITTED', 'RESUBMITTED', 'LOCKED'] },
+      },
+    });
+    return { locked: submittedCount > 0, submittedCount };
+  }
+
   async loadStandardRubric(eventId: string, userId: string) {
     const existing = await this.prisma.scoringTemplate.findFirst({
       where: { eventId },
       include: { criteria: true },
     });
+
+    // Replacing the rubric wholesale is the most destructive edit of all.
+    if (existing) await this.assertNotScoring(existing.id, 'The rubric');
 
     if (existing && existing.criteria.length > 0) {
       throw new BadRequestException(
@@ -209,6 +288,7 @@ export class ScoringTemplatesService {
   }
 
   async addCriterion(input: AddCriterionInput, userId: string) {
+    await this.assertNotScoring(input.templateId, 'Criteria');
     const template = await this.prisma.scoringTemplate.findUnique({
       where: { id: input.templateId },
       include: { criteria: true },
@@ -255,6 +335,20 @@ export class ScoringTemplatesService {
     });
     if (!existing) throw new NotFoundException('Criterion not found');
 
+    // Wording can always be corrected — a typo does not change the arithmetic.
+    // Anything that changes what a score means cannot.
+    const structural =
+      input.maxScore !== undefined ||
+      input.weight !== undefined ||
+      input.parentId !== undefined ||
+      input.scoreIncrement !== undefined ||
+      input.requiresComment !== undefined ||
+      input.scoringAnchors !== undefined;
+
+    if (structural) {
+      await this.assertNotScoring(existing.templateId, 'Scoring structure');
+    }
+
     if (input.maxScore !== undefined) {
       await this.assertFits(
         existing.templateId,
@@ -276,6 +370,10 @@ export class ScoringTemplatesService {
   }
 
   async removeCriterion(id: string, userId: string) {
+    const target = await this.prisma.scoringCriterion.findUnique({
+      where: { id }, select: { templateId: true },
+    });
+    if (target) await this.assertNotScoring(target.templateId, 'Criteria');
     const existing = await this.prisma.scoringCriterion.findUnique({
       where: { id },
       include: { template: true },

@@ -5,6 +5,7 @@ import { AuditAction, SlotType } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { allocateAnchors, anchorLoad } from './anchors';
 import { planPasses, describePlan } from './passes';
+import { isMorning, localDate, eventTimezone } from '../common/event-time';
 
 @Injectable()
 export class SchedulingService {
@@ -98,16 +99,18 @@ export class SchedulingService {
       where: { eventId },
     });
 
+    const eventRecord = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { timezone: true },
+    });
+    const tz = eventTimezone(eventRecord);
+
     const blockedRoomSlots: Array<{ room_id: string; slot_id: string }> = [];
     for (const ex of exclusions) {
-      const exDate = new Date(ex.date).toISOString().split('T')[0];
+      const exDate = localDate(ex.date, tz);
       for (const slot of slots) {
-        const slotDate = new Date(slot.date).toISOString().split('T')[0];
-        if (slotDate !== exDate) continue;
-        const hour = new Date(slot.startTime).getUTCHours();
-        // Slots are stored in UTC; Singapore noon is 04:00 UTC.
-        const isMorning = hour < 4;
-        if ((ex.session === 'AM') === isMorning) {
+        if (localDate(slot.date, tz) !== exDate) continue;
+        if ((ex.session === 'AM') === isMorning(slot.startTime, tz)) {
           blockedRoomSlots.push({ room_id: ex.roomId, slot_id: slot.id });
         }
       }

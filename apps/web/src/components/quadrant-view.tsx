@@ -47,11 +47,24 @@ type Scorecard = {
 const SUBMITTED = ['SUBMITTED', 'RESUBMITTED', 'LOCKED'];
 const PAGE_SIZE = 3;
 
+/**
+ * Times are shown in the event's timezone, not the judge's device.
+ *
+ * A judge dialling in from Bangkok reading "14:00" needs it to mean the same
+ * thing the coordinator means. Showing them their own local time against a
+ * schedule written in event time is how somebody misses a session.
+ */
+const EVENT_TZ = 'Asia/Singapore';
+
 const timeOf = (iso?: string) =>
-  iso ? new Date(iso).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  iso ? new Date(iso).toLocaleTimeString('en-SG', {
+    timeZone: EVENT_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+  }) : '';
 
 const dayOf = (iso?: string) =>
-  iso ? new Date(iso).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  iso ? new Date(iso).toLocaleDateString('en-SG', {
+    timeZone: EVENT_TZ, weekday: 'short', day: 'numeric', month: 'short',
+  }) : '';
 
 type Panel = 'needs' | 'next' | 'done' | 'revisit' | null;
 

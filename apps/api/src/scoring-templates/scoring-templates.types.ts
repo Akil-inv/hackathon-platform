@@ -24,6 +24,12 @@ export class ScoringCriterionEntity {
 }
 
 @ObjectType()
+export class ScoringLockState {
+  @Field() locked!: boolean;
+  @Field(() => Int) submittedCount!: number;
+}
+
+@ObjectType()
 export class ScoringTemplateEntity {
   @Field() id!: string;
   @Field() eventId!: string;

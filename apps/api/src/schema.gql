@@ -498,6 +498,7 @@ type Query {
   scorecardsByEvent(eventId: String!): [ScorecardEntity!]!
   scorecardsByJudge(eventId: String!, judgeId: String!): [ScorecardEntity!]!
   scorecardsByTeam(teamId: String!): [ScorecardEntity!]!
+  scoringLockState(eventId: String!): ScoringLockState!
   scoringTemplate(id: String!): ScoringTemplateEntity!
   scoringTemplates(eventId: String!): [ScoringTemplateEntity!]!
   session(id: String!): SessionEntity!
@@ -677,6 +678,11 @@ type ScoringCriterionEntity {
   scoringAnchors: JSON
   templateId: String!
   weight: Float!
+}
+
+type ScoringLockState {
+  locked: Boolean!
+  submittedCount: Int!
 }
 
 type ScoringTemplateEntity {
