@@ -205,7 +205,7 @@ export default function JudgesPage() {
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
               dragOver ? 'border-accent bg-accent/5' : 'border-dark-500 hover:border-dark-400'
             }`}>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden"
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
             {file ? (
               <div>

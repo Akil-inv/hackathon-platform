@@ -628,7 +628,7 @@ export default function EventSetupPage() {
         <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8}}>
           <label className="btn btn-pri btn-sm" style={{cursor:'pointer'}}>
             {teams.length > 0 ? 'Upload more' : 'Upload teams CSV'}
-            <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('teams', e.target.files[0]); }} />
+            <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('teams', e.target.files[0]); }} />
           </label>
           <span style={{fontSize:12,color:'#6b7a90'}}>Columns: team_name, project_name, track_name, team_lead_email, organisation, tech_stack, problem_statement, solution_summary, country (TH SG MY ID VN HK CN), platform (AWS GCP CLOUDERA PURPLE FABRIC QLIK SENSE INTERNAL OTHER)</span>
         </div>
@@ -683,7 +683,7 @@ export default function EventSetupPage() {
         <div style={{display:'flex',gap:10,alignItems:'center',marginTop:8}}>
           <label className="btn btn-pri btn-sm" style={{cursor:'pointer'}}>
             {judges.length > 0 ? 'Upload more' : 'Upload judges CSV'}
-            <input type="file" accept=".csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('judges', e.target.files[0]); }} />
+            <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={e => { if (e.target.files?.[0]) uploadCsv('judges', e.target.files[0]); }} />
           </label>
           <span style={{fontSize:12,color:'#6b7a90'}}>Columns: name, email, phone, judge_type, judge_tier, organisation, max_sessions, standby</span>
         </div>
@@ -715,7 +715,7 @@ export default function EventSetupPage() {
             <div style={{display:'flex',gap:10,alignItems:'center'}}>
               <label className="btn btn-sec btn-sm" style={{cursor:'pointer'}}>
                 {judgesWithAvailability > 0 ? 'Replace availability' : 'Upload availability CSV'}
-                <input type="file" accept=".csv" style={{display:'none'}}
+                <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}}
                   onChange={e => { if (e.target.files?.[0]) uploadCsv('availability', e.target.files[0]); }} />
               </label>
               <span style={{fontSize:12,color:'#6b7a90'}}>
