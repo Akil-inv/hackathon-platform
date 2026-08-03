@@ -27,6 +27,7 @@ import { OperationsModule } from './operations/operations.module';
 import { HealthResolver } from './health.resolver';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { EventScopeGuard } from './auth/event-scope.guard';
 
 @Module({
   controllers: [HealthController],
@@ -65,6 +66,10 @@ import { RolesGuard } from './auth/roles.guard';
     HealthResolver,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // After RolesGuard: role first, then whether this user may touch this
+    // event. A coordinator who fails the role check should be told that rather
+    // than being told they are on the wrong event.
+    { provide: APP_GUARD, useClass: EventScopeGuard },
   ],
 })
 export class AppModule {}

@@ -45,8 +45,8 @@ export class EventsResolver {
 
   @Roles('ADMIN', 'COORDINATOR', 'AUDITOR')
   @Query(() => [EventEntity])
-  async events() {
-    return this.eventsService.findAll();
+  async events(@CurrentUser() user: any) {
+    return this.eventsService.findAll(user);
   }
 
   @Roles('ADMIN', 'COORDINATOR')

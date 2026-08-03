@@ -54,9 +54,34 @@ export class EventsService {
     return event;
   }
 
-  async findAll() {
+  /**
+   * The events a user may see.
+   *
+   * This is the load-bearing half of event scoping. Every screen hangs off the
+   * event selector, so an event absent from this list is an event the user
+   * cannot navigate to — its id never enters a request at all.
+   *
+   * A user with no assignments sees everything. Nobody has any today, and
+   * denying by default would empty the selector for every account on deploy.
+   */
+  async findAll(user?: { sub?: string; role?: string } | null) {
+    const all = { deletedAt: null } as any;
+
+    if (!user?.sub || user.role === 'SUPER_ADMIN') {
+      return this.prisma.event.findMany({ where: all, orderBy: { createdAt: 'desc' } });
+    }
+
+    const assignments = await this.prisma.eventUser.findMany({
+      where: { userId: user.sub },
+      select: { eventId: true },
+    });
+
+    if (assignments.length === 0) {
+      return this.prisma.event.findMany({ where: all, orderBy: { createdAt: 'desc' } });
+    }
+
     return this.prisma.event.findMany({
-      where: { deletedAt: null },
+      where: { ...all, id: { in: assignments.map(a => a.eventId) } },
       orderBy: { createdAt: 'desc' },
     });
   }
