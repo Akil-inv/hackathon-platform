@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
@@ -330,9 +330,57 @@ export class JudgesService {
     };
   }
 
+  /**
+   * Delete a judge, taking their metadata with them.
+   *
+   * Availability, expertise and conflicts cascade — they describe a judge and
+   * mean nothing without one. Session assignments are removed here rather than
+   * by cascade, so that removing somebody from a schedule is a visible step
+   * rather than a side effect of a foreign key.
+   *
+   * A submitted score is not deleted and not deletable. The team presented, the
+   * judge formed a judgement, and it counted. Clearing a list to re-import a
+   * corrected spreadsheet must not quietly take scores with it.
+   */
   async deleteJudge(id: string, userId: string) {
     const judge = await this.prisma.judge.findUniqueOrThrow({ where: { id } });
-    await this.prisma.judge.delete({ where: { id } });
+
+    const submitted = await this.prisma.scorecard.count({
+      where: {
+        judgeId: id,
+        status: { in: ['SUBMITTED', 'RESUBMITTED', 'LOCKED'] },
+      },
+    });
+
+    if (submitted > 0) {
+      throw new BadRequestException(
+        `${judge.name} has submitted ${submitted} scorecard(s). Deleting them ` +
+        'would remove scores that have already counted. Reopen and withdraw those ' +
+        'first if this judge should not have scored.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Unstarted and draft scorecards go — neither is a judgement of anything.
+      const cards = await tx.scorecard.findMany({
+        where: { judgeId: id },
+        select: { id: true },
+      });
+      if (cards.length > 0) {
+        await tx.criterionScore.deleteMany({
+          where: { scorecardId: { in: cards.map(c => c.id) } },
+        });
+        await tx.scorecard.deleteMany({ where: { judgeId: id } });
+      }
+
+      // A session pointing at a deleted judge is broken in a way nobody notices
+      // until the day.
+      await tx.sessionJudge.deleteMany({ where: { judgeId: id } });
+      await tx.conflictDeclaration.deleteMany({ where: { judgeId: id } });
+      await tx.judgeMessage.deleteMany({ where: { judgeId: id } });
+
+      await tx.judge.delete({ where: { id } });
+    });
     await this.audit.log({ userId, eventId: judge.eventId, action: 'DELETE' as any, entityType: 'Judge', entityId: id, oldValues: { name: judge.name }, reason: 'Judge deleted' });
     return judge;
   }

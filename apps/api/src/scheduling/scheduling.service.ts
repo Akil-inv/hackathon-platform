@@ -155,7 +155,21 @@ export class SchedulingService {
       slotsByDate.set(key, list);
     }
 
-    const anchorPlan = guided
+    /**
+     * The panel every session must have.
+     *
+     * Replaces room anchoring: rather than pinning an MD to a room for a day,
+     * each panel draws one MD and one ED-or-SVP from the pool of ten, alongside
+     * the mandatory PS. Three MDs sharing the sessions rather than two carrying
+     * a room each.
+     */
+    const PANEL = [
+      { tiers: ['PS'], count: 1 },
+      { tiers: ['L2'], count: 1 },
+      { tiers: ['L3', 'L4'], count: 1 },
+    ];
+
+    const anchorPlan = false
       ? allocateAnchors(
           schedulable.map(j => ({
             id: j.id,
@@ -190,6 +204,36 @@ export class SchedulingService {
         )
       : { passes: [], warnings: [] };
 
+    // Concurrency, not total capacity, is what binds here: every room running at
+    // once needs one MD each, so the pool must cover the rooms in every slot.
+    const panelWarnings: string[] = [];
+    if (guided) {
+      const count = (tier: string) =>
+        schedulable.filter(j => ((j as any).judgeTier ?? '') === tier).length;
+
+      const mds = count('L2');
+      const ps = count('PS');
+      const others = count('L3') + count('L4');
+      const rooms_ = rooms.length;
+
+      if (mds < rooms_) {
+        panelWarnings.push(
+          `${mds} MD(s) for ${rooms_} rooms — every room running at once needs one each.`,
+        );
+      } else if (mds === rooms_) {
+        panelWarnings.push(
+          `${mds} MD(s) for ${rooms_} rooms leaves no spare. One unavailable half-day and the schedule will not fill.`,
+        );
+      }
+
+      if (ps < rooms_) {
+        panelWarnings.push(`${ps} PS judge(s) for ${rooms_} rooms — one is needed per session.`);
+      }
+      if (others < rooms_) {
+        panelWarnings.push(`${others} ED/SVP judge(s) for ${rooms_} rooms.`);
+      }
+    }
+
     const payload = {
       event_id: eventId,
       teams: teamsToSchedule.map(t => ({ id: t.id, name: t.name, track_id: t.trackId })),
@@ -208,6 +252,7 @@ export class SchedulingService {
       min_judges_per_team: minJudges,
       max_judges_per_team: maxJudges,
       locked_sessions: lockedSessions,
+      judge_composition: guided ? PANEL : [],
       anchors: anchorPlan.assignments.map(a => ({
         room_id: a.roomId,
         date: a.date,
@@ -215,7 +260,13 @@ export class SchedulingService {
         ps_judge_id: a.psJudgeId,
         anchor_break_slot_ids: a.anchorBreakSlotIds,
       })),
-      reserved_judge_ids: anchorPlan.reservedJudgeIds,
+      // L1 is held back for the final round and vendors are invited by a
+      // coordinator rather than solved. Everyone else is in the pool.
+      reserved_judge_ids: guided
+        ? schedulable
+            .filter(j => ['L1', 'V'].includes((j as any).judgeTier ?? ''))
+            .map(j => j.id)
+        : anchorPlan.reservedJudgeIds,
     };
 
     // Call the Python solver
@@ -340,7 +391,7 @@ export class SchedulingService {
                unavailable.slice(0, 5).map(j => j.name).join(', ') +
                (unavailable.length > 5 ? `, and ${unavailable.length - 5} more` : '')]
             : []),
-          ...anchorPlan.warnings,
+          ...(guided ? panelWarnings : anchorPlan.warnings),
           ...(result.warnings || []),
         ],
         qualityScore: result.quality_score || 0,

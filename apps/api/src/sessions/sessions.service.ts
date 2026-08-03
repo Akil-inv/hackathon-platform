@@ -24,12 +24,19 @@ export class SessionsService {
         id: sj.id,
         judgeId: sj.judgeId,
         judgeName: sj.judge?.name || '',
+        judgeTier: sj.judge?.judgeTier || null,
         attended: sj.attended,
       })),
       scorecardsSubmitted: (s.scorecards || []).filter((sc: any) =>
         ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(sc.status)
       ).length,
-      scorecardsTotal: (s.scorecards || []).length,
+      // A judge who stepped out is not expected to score, so the session is not
+      // waiting on them. Counting them would leave it at two of three forever,
+      // which reads exactly like a judge who is late.
+      scorecardsTotal: (s.scorecards || []).filter((sc: any) =>
+        !(s.judges || []).some((sj: any) => sj.judgeId === sc.judgeId && sj.onBreak),
+      ).length,
+      judgesOnBreak: (s.judges || []).filter((sj: any) => sj.onBreak).length,
     };
   }
 

@@ -70,6 +70,13 @@ export class RescheduleInput {
 }
 
 @InputType()
+export class SetJudgeBreakInput {
+  @Field() sessionId!: string;
+  @Field() judgeId!: string;
+  @Field() onBreak!: boolean;
+}
+
+@InputType()
 export class MarkAbsentInput {
   @Field() judgeId!: string;
   @Field() eventId!: string;

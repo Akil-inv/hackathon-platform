@@ -359,7 +359,7 @@ model JudgeAvailability {
   endTime   DateTime @map("end_time") @db.Timestamptz
   createdAt DateTime @default(now()) @map("created_at")
 
-  judge Judge @relation(fields: [judgeId], references: [id])
+  judge Judge @relation(fields: [judgeId], references: [id], onDelete: Cascade)
 
   @@map("judge_availability")
 }
@@ -371,7 +371,7 @@ model JudgeExpertise {
   expertiseLevel ExpertiseLevel @default(PRIMARY) @map("expertise_level")
   createdAt      DateTime       @default(now()) @map("created_at")
 
-  judge Judge          @relation(fields: [judgeId], references: [id])
+  judge Judge          @relation(fields: [judgeId], references: [id], onDelete: Cascade)
   track ChallengeTrack @relation(fields: [trackId], references: [id])
 
   @@unique([judgeId, trackId])
@@ -548,6 +548,13 @@ model SessionJudge {
   sessionId String   @map("session_id") @db.Uuid
   judgeId   String   @map("judge_id") @db.Uuid
   attended  Boolean  @default(false)
+  /// The judge has stepped out of this session.
+  ///
+  /// Distinct from `attended`, which records whether they turned up. A break is
+  /// declared by the judge for one session and reversed when they return; it is
+  /// not a statement about the whole day.
+  onBreak   Boolean  @default(false) @map("on_break")
+  breakAt   DateTime? @map("break_at")
   createdAt DateTime @default(now()) @map("created_at")
 
   session JudgingSession @relation(fields: [sessionId], references: [id])

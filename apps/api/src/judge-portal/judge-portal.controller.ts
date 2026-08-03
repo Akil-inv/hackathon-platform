@@ -22,6 +22,14 @@ export class JudgePortalController {
   @Get(':token/scorecards')
   async getScorecards(@Param('token') token: string, @Query('event') eventId: string) {
     const judge = await this.service.getJudgeByToken(token, eventId);
+    // Sessions this judge has stepped out of. Their scorecards are excluded so
+    // the portal does not keep asking for a score they are excused from.
+    const breaks = await this.prisma.sessionJudge.findMany({
+      where: { judgeId: judge.id, onBreak: true } as any,
+      select: { sessionId: true },
+    });
+    const onBreak = new Set(breaks.map(b => b.sessionId));
+
     const scorecards = await this.prisma.scorecard.findMany({
       where: { judgeId: judge.id, eventId },
       include: {
@@ -69,7 +77,12 @@ export class JudgePortalController {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     const eventClosed = event?.status === 'COMPLETED' || event?.status === 'ARCHIVED';
 
-    return scorecards.map(sc => {
+    return scorecards
+      // A session this judge stepped out of is not theirs to score. Removing it
+      // here keeps it out of every quadrant at once, rather than each surface
+      // needing to know about breaks.
+      .filter(sc => !onBreak.has(sc.sessionId))
+      .map(sc => {
       const scoreableStages = ['SCORING', 'COMPLETED', 'QA', 'IN_PROGRESS'];
       const sessionActive = scoreableStages.includes(sc.session?.stage || '');
       const scorecardEditable = ['NOT_STARTED', 'DRAFT', 'REOPENED'].includes(sc.status);
@@ -136,6 +149,95 @@ export class JudgePortalController {
       data: { dismissedAt: new Date() },
     });
     return { success: true };
+  }
+
+  /**
+   * Step out of one session, or come back.
+   *
+   * Only an MD. The panel is one MD, one ED or SVP, and one PS — the MD pool is
+   * three deep precisely so one can be absent, and the other two seats have no
+   * such slack. Refused rather than hidden, because the endpoint is reachable
+   * whatever the button does.
+   */
+  @Public()
+  @Post(':token/break')
+  async declareBreak(
+    @Param('token') token: string,
+    @Query('event') eventId: string,
+    @Body() body: { sessionId: string; onBreak: boolean },
+  ) {
+    const judge = await this.service.getJudgeByToken(token, eventId);
+
+    // The two IG seats. The PS is excluded: there is one per session and no
+    // cover for them at all.
+    if (!['L2', 'L3', 'L4'].includes((judge as any).judgeTier)) {
+      throw new ForbiddenException(
+        'This seat has no cover, so it cannot be left empty. Ask a coordinator ' +
+        'if you need to step out.',
+      );
+    }
+
+    const assignment = await this.prisma.sessionJudge.findFirst({
+      where: { sessionId: body.sessionId, judgeId: judge.id },
+    });
+    if (!assignment) throw new NotFoundException('You are not on this session');
+
+    // Either IG judge may step out; not both. One of them plus the PS is two
+    // scorers, which is the floor. Both out would leave the PS scoring alone,
+    // and a single judgement of a team is materially weaker than two.
+    if (body.onBreak) {
+      const otherIgOnBreak = await this.prisma.sessionJudge.findFirst({
+        where: {
+          sessionId: body.sessionId,
+          judgeId: { not: judge.id },
+          onBreak: true,
+          judge: { judgeTier: { in: ['L2', 'L3', 'L4'] as any } },
+        } as any,
+        include: { judge: true },
+      });
+
+      if (otherIgOnBreak) {
+        throw new BadRequestException(
+          `${otherIgOnBreak.judge.name} has already stepped out of this session. ` +
+          'Only one of you can — the team would otherwise be scored by one judge.',
+        );
+      }
+    }
+
+    const scorecard = await this.prisma.scorecard.findFirst({
+      where: { sessionId: body.sessionId, judgeId: judge.id },
+    });
+
+    if (
+      body.onBreak &&
+      scorecard &&
+      ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(scorecard.status)
+    ) {
+      throw new BadRequestException(
+        'You have already submitted a score for this team. Ask a coordinator to ' +
+        'reopen it if it should not count.',
+      );
+    }
+
+    await this.prisma.sessionJudge.update({
+      where: { id: assignment.id },
+      data: {
+        onBreak: body.onBreak,
+        breakAt: body.onBreak ? new Date() : null,
+      } as any,
+    });
+
+    // A draft written before stepping out is discarded. Keeping it would leave
+    // a half-formed judgement of a session the judge did not see.
+    if (body.onBreak && scorecard && scorecard.status === 'DRAFT') {
+      await this.prisma.criterionScore.deleteMany({ where: { scorecardId: scorecard.id } });
+      await this.prisma.scorecard.update({
+        where: { id: scorecard.id },
+        data: { status: 'NOT_STARTED', totalScore: null },
+      });
+    }
+
+    return { success: true, onBreak: body.onBreak };
   }
 
   @Public()

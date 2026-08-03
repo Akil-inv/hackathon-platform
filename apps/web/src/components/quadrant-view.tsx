@@ -29,6 +29,8 @@ import DriftMetronome from '@/components/drift-metronome';
 
 type Session = {
   sessionId: string;
+  /** This judge has stepped out of this session. */
+  onBreak?: boolean;
   team: { name: string; projectName?: string; country?: string | null; platform?: string | null };
   room: string;
   date: string;
@@ -141,6 +143,7 @@ export default function QuadrantView({
   scorecards,
   onScore,
   onInfo,
+  onBreak,
   footer,
 }: {
   sessions: Session[];
@@ -149,6 +152,8 @@ export default function QuadrantView({
   onScore: (sessionId: string, queue?: string[]) => void;
   /** Opens the use case panel for a session. */
   onInfo?: (sessionId: string) => void;
+  /** Declares or clears a break. Only passed for an MD. */
+  onBreak?: (sessionId: string, onBreak: boolean) => void;
   footer?: React.ReactNode;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
@@ -337,11 +342,24 @@ export default function QuadrantView({
               <span className="sm:hidden">Score</span>
               <span className="hidden sm:inline">Score now</span>
             </button>
+            {/* Only an MD sees this, because only an MD may. A control that
+                appears and then fails is worse than one that is absent. */}
+            {onBreak && (
+              <button
+                onClick={() => onBreak(g.live!.s.sessionId, true)}
+                className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2.5 sm:py-3.5 text-base text-slate-600 hover:text-slate-900"
+              >Step out</button>
+            )}
           </div>
         </div>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
           <p className="text-base text-slate-600">
+            {sessions.some(s => s.onBreak) && (
+              <span className="mr-2 rounded-lg bg-slate-200 px-2.5 py-1 text-sm text-slate-700">
+                You stepped out of {sessions.filter(s => s.onBreak).length} session(s)
+              </span>
+            )}
             {g.next.length > 0 ? (
               <>You&rsquo;re all caught up. Next session:{' '}
                 <span className="font-semibold text-slate-900">{g.next[0].s.team.name}</span>

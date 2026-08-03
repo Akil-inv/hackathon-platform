@@ -496,6 +496,19 @@ export default function JudgePortalPage() {
           <QuadrantView
             sessions={sessions}
             onInfo={(sessionId: string) => setInfoSessionId(sessionId)}
+            onBreak={['L2', 'L3', 'L4'].includes(schedule?.judge?.judgeTier) ? async (sessionId: string, on: boolean) => {
+              if (on && !confirm(
+                'Step out of this session?\n\n' +
+                'Anything you have entered will be discarded, and this team will ' +
+                'be scored by the other two judges.'
+              )) return;
+              await fetch(`${apiUrl}/api/judge-portal/${token}/break?event=${eventId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId, onBreak: on }),
+              });
+              fetchData();
+            } : undefined}
 
             scorecards={scorecards}
             onScore={(sessionId: string) => {

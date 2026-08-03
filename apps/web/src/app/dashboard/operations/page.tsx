@@ -59,6 +59,24 @@ export default function CommandCentrePage() {
    * shortcut rather than a second mechanism — the message that goes out is
    * identical to one addressed to three people by hand.
    */
+  /**
+   * Mark an MD out of a session, or back into it.
+   *
+   * An MD who has stepped out to take a call will not necessarily open their
+   * portal to say so. Somebody in the room marking it is the realistic case,
+   * and it writes the same field the judge's own control does.
+   */
+  const setJudgeBreak = async (sessionId: string, judgeId: string, judgeName: string, on: boolean) => {
+    if (on && !confirm(`Mark ${judgeName} as stepped out of this session?`)) return;
+    const d = await run(`mutation B($input: SetJudgeBreakInput!) {
+      setJudgeBreak(input: $input) { success message }
+    }`, { input: { sessionId, judgeId, onBreak: on } });
+    if (d?.setJudgeBreak) {
+      showMsg(d.setJudgeBreak.message);
+      setTimeout(() => window.location.reload(), 800);
+    }
+  };
+
   const messageSession = (s: any) => {
     setMsgTo((s.judges || []).map((j: any) => j.judgeId));
     setMsgBody('');
@@ -476,6 +494,25 @@ export default function CommandCentrePage() {
                 <div key={j.judgeId} className="exp-judge">
                   <span className="exp-judge-name">{j.judgeName}</span>
                   <span className="exp-judge-type">{j.judgeType || ''}</span>
+                  {j.onBreak && (
+                    <span style={{fontSize:12,color:'#8ea3bc',fontStyle:'italic'}}>on break</span>
+                  )}
+                  {/* Either IG seat, and only when the other is not already
+                      out — the server refuses it either way, but a control that
+                      cannot work should not invite the click. */}
+                  {['L2', 'L3', 'L4'].includes(j.judgeTier) &&
+                   !(s.judges || []).some((o: any) =>
+                     o.judgeId !== j.judgeId && o.onBreak &&
+                     ['L2', 'L3', 'L4'].includes(o.judgeTier)) && (
+                    <span
+                      role="button"
+                      title={j.onBreak ? 'Mark as back' : 'Mark as stepped out'}
+                      onClick={(e) => { e.stopPropagation(); setJudgeBreak(s.id, j.judgeId, j.judgeName, !j.onBreak); }}
+                      style={{cursor:'pointer',fontSize:12,color: j.onBreak ? '#4ade80' : '#8ea3bc',
+                              padding:'1px 6px',borderRadius:4,
+                              border:'0.5px solid rgba(255,255,255,0.12)'}}
+                    >{j.onBreak ? 'back' : 'break'}</span>
+                  )}
                   {/* Only above the event minimum — below it, removing a judge
                       would leave the team under-judged. */}
                   {(s.judges?.length ?? 0) > (event?.minJudgesPerTeam ?? 3) && (

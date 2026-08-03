@@ -71,6 +71,12 @@ class ScheduleRequest(BaseModel):
     locked_sessions: list[LockedSession] = []
     # Rooms this pass may use. Empty means any room. Set when remote teams must
     # go in a room with video conferencing.
+    # What every panel must contain, as a list of {tiers, count}. Empty falls
+    # back to the old min/max judge counts, so auto mode is unaffected.
+    #
+    # Expressed as data rather than code so a different event with a different
+    # panel shape is a payload change, not a solver change.
+    judge_composition: list[dict] = []
     restrict_to_room_ids: list[str] = []
     # Room-slot pairs that cannot be used — a room booked for something else.
     # Shaped as dicts rather than tuples so the JSON stays readable when a

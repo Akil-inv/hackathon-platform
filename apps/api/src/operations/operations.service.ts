@@ -4,7 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
 import {
   SwapJudgeInput, ChangeRoomInput, RescheduleInput, MarkAbsentInput,
-  AddJudgeInput, RemoveJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput,
+  AddJudgeInput, SetJudgeBreakInput, RemoveJudgeInput, CancelSessionInput, UpdateStageInput, SwapRoomsInput,
 } from './operations.types';
 
 @Injectable()
@@ -349,6 +349,90 @@ export class OperationsService {
       success: true,
       message: `Removed ${assignment.judge?.name ?? 'judge'} from ${session.team.name}`,
       warnings,
+    };
+  }
+
+  /**
+   * Mark an MD out of a session on their behalf, or back into it.
+   *
+   * The same field the judge's own control writes, with the same rules — only
+   * an MD, and not once they have submitted. A coordinator marking it is the
+   * common case, since a judge who has stepped out to take a call is not
+   * necessarily going to open their portal to say so.
+   */
+  async setJudgeBreak(input: SetJudgeBreakInput, userId: string) {
+    const assignment = await this.prisma.sessionJudge.findFirst({
+      where: { sessionId: input.sessionId, judgeId: input.judgeId },
+      include: { judge: true, session: { include: { team: true } } },
+    });
+    if (!assignment) throw new NotFoundException('That judge is not on this session');
+
+    if (!['L2', 'L3', 'L4'].includes((assignment.judge as any).judgeTier)) {
+      throw new BadRequestException(
+        `${assignment.judge.name} holds a seat with no cover, so it cannot be left ` +
+        'empty. Swap them instead.',
+      );
+    }
+
+    if (input.onBreak) {
+      const otherIgOnBreak = await this.prisma.sessionJudge.findFirst({
+        where: {
+          sessionId: input.sessionId,
+          judgeId: { not: input.judgeId },
+          onBreak: true,
+          judge: { judgeTier: { in: ['L2', 'L3', 'L4'] as any } },
+        } as any,
+        include: { judge: true },
+      });
+
+      if (otherIgOnBreak) {
+        throw new BadRequestException(
+          `${otherIgOnBreak.judge.name} has already stepped out of this session. ` +
+          'Only one can — the team would otherwise be scored by one judge.',
+        );
+      }
+    }
+
+    const scorecard = await this.prisma.scorecard.findFirst({
+      where: { sessionId: input.sessionId, judgeId: input.judgeId },
+    });
+
+    if (
+      input.onBreak &&
+      scorecard &&
+      ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(scorecard.status)
+    ) {
+      throw new BadRequestException(
+        `${assignment.judge.name} has already submitted a score. Reopen it first ` +
+        'if it should not count.',
+      );
+    }
+
+    await this.prisma.sessionJudge.update({
+      where: { id: assignment.id },
+      data: { onBreak: input.onBreak, breakAt: input.onBreak ? new Date() : null } as any,
+    });
+
+    if (input.onBreak && scorecard && scorecard.status === 'DRAFT') {
+      await this.prisma.criterionScore.deleteMany({ where: { scorecardId: scorecard.id } });
+      await this.prisma.scorecard.update({
+        where: { id: scorecard.id },
+        data: { status: 'NOT_STARTED', totalScore: null },
+      });
+    }
+
+    await this.audit.log({
+      userId, eventId: assignment.session.eventId,
+      action: AuditAction.UPDATE, entityType: 'SessionJudge', entityId: assignment.id,
+      newValues: { judge: assignment.judge.name, onBreak: input.onBreak },
+    });
+
+    return {
+      success: true,
+      message: input.onBreak
+        ? `${assignment.judge.name} stepped out of ${assignment.session.team.name}`
+        : `${assignment.judge.name} is back on ${assignment.session.team.name}`,
+      warnings: [],
     };
   }
 
@@ -710,6 +794,7 @@ export class OperationsService {
         room: true,
         timeSlot: true,
         scorecards: { include: { judge: true } },
+        judges: true,
       },
     });
 
@@ -727,9 +812,19 @@ export class OperationsService {
     const byJudge = new Map<string, Row>();
 
     for (const s of sessions) {
+      // Who stepped out of this session and owes nothing.
+      const excused = new Set(
+        (s as any).judges
+          .filter((sj: any) => sj.onBreak)
+          .map((sj: any) => sj.judgeId as string),
+      );
+
       for (const sc of s.scorecards) {
         if (!['NOT_STARTED', 'DRAFT', 'REOPENED'].includes(sc.status)) continue;
         if (!sc.judge) continue;
+        // Chasing an excused judge teaches a coordinator to ignore the panel,
+        // which costs more than the one row saves.
+        if (excused.has(sc.judgeId)) continue;
 
         const row = byJudge.get(sc.judgeId) ?? {
           judgeId: sc.judgeId,

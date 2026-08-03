@@ -238,19 +238,45 @@ def generate_schedule(req: ScheduleRequest) -> ScheduleResponse:
                         continue
                     model.add(y[j, t, s, r] == 0)
 
-    # 6. Minimum judges per team, counting the anchors already committed.
-    for t in range(n_teams):
-        model.add(
-            sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
-            >= min_j
-        )
+    # 6. Panel composition.
+    #
+    #    Either the panel is described by tier — one MD, one ED or SVP, one PS —
+    #    or it falls back to a plain count. The composition form is exact rather
+    #    than a minimum: a panel of two MDs satisfies "at least one MD" and is
+    #    not what was asked for.
+    composition = getattr(req, 'judge_composition', None) or []
 
-    # 7. Maximum judges per team
-    for t in range(n_teams):
-        model.add(
-            sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
-            <= max_j
-        )
+    if composition:
+        for rule in composition:
+            tiers = set(rule.get('tiers', []))
+            count = int(rule.get('count', 1))
+            pool = [j for j in range(n_judges) if getattr(judges[j], 'tier', 'L3') in tiers]
+
+            if not pool:
+                # No judge of this tier exists. Leaving the constraint in would
+                # make the model infeasible with no explanation; dropping it
+                # lets the solve proceed and the shortfall be reported.
+                continue
+
+            for t in range(n_teams):
+                model.add(
+                    sum(y[j, t, s, r] for j in pool for s in range(n_slots) for r in range(n_rooms))
+                    == count
+                )
+    else:
+        # Minimum judges per team, counting the anchors already committed.
+        for t in range(n_teams):
+            model.add(
+                sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
+                >= min_j
+            )
+
+        # Maximum judges per team
+        for t in range(n_teams):
+            model.add(
+                sum(y[j, t, s, r] for j in range(n_judges) for s in range(n_slots) for r in range(n_rooms))
+                <= max_j
+            )
 
     # 7. Judge availability
     for j in range(n_judges):

@@ -7,6 +7,10 @@ registerEnumType(SessionStage, { name: 'SessionStage' });
 export class SessionJudgeEntity {
   @Field() id!: string;
   @Field() judgeId!: string;
+  /** The judge has stepped out of this session and will not score it. */
+  @Field({ defaultValue: false }) onBreak?: boolean;
+  /** Only an MD may take a break, so the control is shown by tier. */
+  @Field({ nullable: true }) judgeTier?: string;
   @Field() judgeName!: string;
   @Field() attended!: boolean;
 }
@@ -37,6 +41,8 @@ export class SessionEntity {
   @Field(() => [SessionJudgeEntity]) judges!: SessionJudgeEntity[];
   @Field(() => Int) scorecardsSubmitted!: number;
   @Field(() => Int) scorecardsTotal!: number;
+  /** MDs who stepped out. Shown so a shorter panel has a visible reason. */
+  @Field(() => Int, { defaultValue: 0 }) judgesOnBreak?: number;
 }
 
 @InputType()

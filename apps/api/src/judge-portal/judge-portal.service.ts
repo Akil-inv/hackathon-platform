@@ -35,7 +35,9 @@ export class JudgePortalService {
     });
 
     return {
-      judge: { id: judge.id, name: judge.name, email: judge.email, judgeType: judge.judgeType, organisation: judge.organisation },
+      // Tier decides whether the break control appears at all. Without it the
+      // portal cannot tell an MD from an ED.
+      judge: { id: judge.id, name: judge.name, email: judge.email, judgeType: judge.judgeType, judgeTier: (judge as any).judgeTier, organisation: judge.organisation },
       message: await this.prisma.judgeMessage
         .findFirst({
           where: { judgeId: judge.id, dismissedAt: null },
@@ -48,6 +50,7 @@ export class JudgePortalService {
         const sc = s.scorecards?.[0];
         return {
           sessionId: s.id, scorecardId: sc?.id || null,
+          onBreak: (sj as any).onBreak ?? false,
           scorecardStatus: sc?.status || 'NO_SCORECARD', totalScore: sc?.totalScore || null,
           team: { name: s.team.name, projectName: s.team.projectName, track: s.team.track?.name || null,
             country: s.team.country || null,
