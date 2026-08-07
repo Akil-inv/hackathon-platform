@@ -26,6 +26,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       NODE_ENV: production
       SCHEDULER_URL: http://scheduler:8001
+      # Sites allowed to call this API with credentials. Unset, the API falls
+      # back to reflecting any origin and warns on boot.
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      # Salt for judge portal links. Changing this invalidates every link
+      # already sent, so set it before an event and never during one.
+      JUDGE_TOKEN_SALT: ${JUDGE_TOKEN_SALT}
       AWS_REGION: ap-southeast-1
   scheduler:
     build:
