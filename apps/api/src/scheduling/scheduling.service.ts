@@ -3,7 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction, SlotType } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import { allocateAnchors, anchorLoad } from './anchors';
+// Anchoring was replaced by panel composition — see the PANEL constant below.
+// anchors.ts is retained for reference and is no longer called.
 import { planPasses, describePlan } from './passes';
 import { isMorning, localDate, eventTimezone } from '../common/event-time';
 
@@ -169,19 +170,13 @@ export class SchedulingService {
       { tiers: ['L3', 'L4'], count: 1 },
     ];
 
-    const anchorPlan = false
-      ? allocateAnchors(
-          schedulable.map(j => ({
-            id: j.id,
-            name: j.name,
-            judgeTier: (j as any).judgeTier ?? 'L3',
-            maxSessions: j.maxSessions,
-            isStandby: (j as any).isStandby ?? false,
-          })),
-          rooms.map(r => ({ id: r.id, name: r.name })),
-          slotsByDate,
-        )
-      : { assignments: [], reservedJudgeIds: [], warnings: [], coverSlotIds: {} };
+    // Anchoring is retired. Composition replaces it: rather than pinning a judge
+    // to a room for a day, each panel is drawn from the pool per session. The
+    // empty plan is kept so the payload shape does not change.
+    const anchorPlan: {
+      assignments: any[]; reservedJudgeIds: string[];
+      warnings: string[]; coverSlotIds: Record<string, string[]>;
+    } = { assignments: [], reservedJudgeIds: [], warnings: [], coverSlotIds: {} };
 
     // Guided mode runs a sequence of smaller solves rather than one large one,
     // so the rules are honoured in priority order and a failure names the rule

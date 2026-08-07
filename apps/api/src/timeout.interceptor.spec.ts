@@ -9,7 +9,16 @@ describe('TimeoutInterceptor', () => {
 
   beforeEach(() => {
     interceptor = new TimeoutInterceptor(100); // 100ms for fast testing
-    mockContext = {} as ExecutionContext;
+    // The interceptor asks the context whether this is HTTP or GraphQL, so it
+    // can apply a longer timeout to the operations that need one. An empty
+    // object was enough before that existed.
+    // Enough of an ExecutionContext for the interceptor to work out which
+    // timeout applies: the transport, and the URL it uses to match per-route
+    // overrides. An empty object was enough before either existed.
+    mockContext = {
+      getType: () => 'http',
+      switchToHttp: () => ({ getRequest: () => ({ url: '/test' }) }),
+    } as unknown as ExecutionContext;
   });
 
   it('should pass through fast requests', (done) => {

@@ -10,15 +10,14 @@ import { useMemo } from 'react';
  * return "infeasible".
  *
  * The arithmetic mirrors the scheduler's hard rules:
- *   - every team is judged once, by between min and max judges
- *   - one L2 anchors each room for the whole event
- *   - judges work at most `maxConsecutive` sessions before a break
- *   - L1 judges are excluded from the first round
+ *   - every team is judged once, by a panel of one MD, one ED or SVP, and one PS
+ *   - L1 judges are held back for the final round
  *   - vendor judges only see teams using their toolset
  *
  * The binding constraint is usually concurrency, not totals: with 3 rooms
- * running in parallel you need 3 anchors free in *every* active slot,
- * regardless of how many sessions each does across the event.
+ * running in parallel you need one judge of each kind free in *every* active
+ * slot, regardless of how many sessions each does across the event. A pool can
+ * have ample total capacity and still be unable to staff a single slot.
  */
 
 export type PlannerJudge = {
@@ -84,26 +83,19 @@ export default function ReadinessPlanner({
 
     // L1s sit out the first round, so they are not part of this pool.
     const usable = judges.filter((j) => !excludedTiers.includes((j.judgeTier ?? '').toUpperCase()));
-    const anchors = usable.filter((j) => (j.judgeTier ?? '').toUpperCase() === anchorTier);
-    const nonAnchors = usable.filter((j) => (j.judgeTier ?? '').toUpperCase() !== anchorTier);
+    // The panel the scheduler actually builds: one MD, one ED or SVP, one PS.
+    // Vendors and leadership are not drawn from — the former are invited to
+    // platform blocks by a coordinator, the latter are held for the final round.
+    const tierOf = (j: PlannerJudge) => (j.judgeTier ?? '').toUpperCase();
+    const mds = usable.filter((j) => tierOf(j) === 'L2');
+    const igOthers = usable.filter((j) => ['L3', 'L4'].includes(tierOf(j)));
+    const psJudges = judges.filter((j) => tierOf(j) === 'PS');
 
     const roomSlots = roomCount * slotsPerDay * eventDays;
-
-    // Anchors work maxConsecutive on, one off — so across any run of
-    // (maxConsecutive + 1) slots, each anchor covers maxConsecutive of them.
-    const anchorDuty = maxConsecutive / (maxConsecutive + 1);
-    const anchorsNeeded = Math.ceil(roomCount / anchorDuty);
-
     const sessionCapacity = (j: PlannerJudge) => j.maxSessions ?? DEFAULT_MAX_SESSIONS;
-    const anchorCapacity = anchors.reduce((sum, j) => sum + sessionCapacity(j), 0);
-    const totalCapacity = usable.reduce((sum, j) => sum + sessionCapacity(j), 0);
-
-    // Every session needs one anchor plus (minJudges - 1) others.
-    const nonAnchorSessionsNeeded = sessionsNeeded * (minJudgesPerTeam - 1);
-    const nonAnchorCapacity = nonAnchors.reduce((sum, j) => sum + sessionCapacity(j), 0);
-
-    // Concurrency floor: this many judges must be free in every active slot.
-    const concurrentNeed = roomCount * minJudgesPerTeam;
+    const capacityOf = (pool: PlannerJudge[]) =>
+      pool.reduce((sum, j) => sum + sessionCapacity(j), 0);
+    const totalCapacity = capacityOf(usable);
 
     const checks: Check[] = [];
 
@@ -121,67 +113,51 @@ export default function ReadinessPlanner({
             : undefined,
     });
 
-    checks.push({
-      label: `${anchorTier} anchors`,
-      detail: `One per room, ${maxConsecutive} on / 1 off`,
-      have: anchors.length,
-      need: anchorsNeeded,
-      state:
-        anchors.length >= anchorsNeeded + 1
-          ? 'ok'
-          : anchors.length >= anchorsNeeded
-            ? 'warn'
-            : 'fail',
-      fix:
-        anchors.length < anchorsNeeded
-          ? `Add ${anchorsNeeded - anchors.length} more ${anchorTier} judge(s)`
-          : anchors.length === anchorsNeeded
-            ? 'No slack. One absence and the schedule cannot be built.'
+    // Each pool is checked twice, because two different things go wrong.
+    //
+    // Concurrency binds first and is invisible in a capacity total: with two
+    // rooms running, two MDs are occupied in every slot whatever their session
+    // limits say. Capacity is what fails when max_sessions is left at its
+    // default.
+    const pools: Array<{
+      label: string; pool: PlannerJudge[]; detail: string; cover: string;
+    }> = [
+      { label: 'MDs', pool: mds, detail: 'One per session', cover: 'MD' },
+      { label: 'ED / SVP', pool: igOthers, detail: 'One per session', cover: 'ED or SVP' },
+      { label: 'Professional Services', pool: psJudges, detail: 'One per session, no cover', cover: 'PS' },
+    ];
+
+    for (const { label, pool, detail, cover } of pools) {
+      checks.push({
+        label: `${label} available at once`,
+        detail: `${detail} — every room running needs one free`,
+        have: pool.length,
+        need: roomCount,
+        state:
+          pool.length > roomCount ? 'ok' : pool.length === roomCount ? 'warn' : 'fail',
+        fix:
+          pool.length < roomCount
+            ? `Add ${roomCount - pool.length} more ${cover} judge(s) — a room will otherwise sit idle`
+            : pool.length === roomCount
+              ? 'No spare. One unavailable half-day and the schedule will not fill.'
+              : undefined,
+      });
+
+      const capacity = capacityOf(pool);
+      checks.push({
+        label: `${label} session capacity`,
+        detail: `Combined max sessions across ${pool.length} judge(s)`,
+        have: capacity,
+        need: sessionsNeeded,
+        state:
+          capacity >= sessionsNeeded * 1.15 ? 'ok' : capacity >= sessionsNeeded ? 'warn' : 'fail',
+        fix:
+          capacity < sessionsNeeded
+            ? `Short by ${sessionsNeeded - capacity}. Raise max sessions to at least ` +
+              `${Math.ceil(sessionsNeeded / Math.max(pool.length, 1))} each, or add judges.`
             : undefined,
-    });
-
-    checks.push({
-      label: `${anchorTier} session capacity`,
-      detail: 'Every session needs one anchor',
-      have: anchorCapacity,
-      need: sessionsNeeded,
-      state: anchorCapacity >= sessionsNeeded ? 'ok' : 'fail',
-      fix:
-        anchorCapacity < sessionsNeeded
-          ? `${sessionsNeeded - anchorCapacity} session(s) uncovered — add anchors or raise their max sessions`
-          : undefined,
-    });
-
-    checks.push({
-      label: 'Other judges',
-      detail: `${minJudgesPerTeam - 1} per session alongside the anchor`,
-      have: nonAnchorCapacity,
-      need: nonAnchorSessionsNeeded,
-      state:
-        nonAnchorCapacity >= nonAnchorSessionsNeeded * 1.15
-          ? 'ok'
-          : nonAnchorCapacity >= nonAnchorSessionsNeeded
-            ? 'warn'
-            : 'fail',
-      fix:
-        nonAnchorCapacity < nonAnchorSessionsNeeded
-          ? `Short by ${nonAnchorSessionsNeeded - nonAnchorCapacity} judge-sessions — roughly ${Math.ceil((nonAnchorSessionsNeeded - nonAnchorCapacity) / DEFAULT_MAX_SESSIONS)} more judge(s)`
-          : undefined,
-    });
-
-    checks.push({
-      label: 'Judges per slot',
-      detail: 'Must be free simultaneously when all rooms run',
-      have: usable.length,
-      need: concurrentNeed,
-      state: usable.length >= concurrentNeed * 1.5 ? 'ok' : usable.length >= concurrentNeed ? 'warn' : 'fail',
-      fix:
-        usable.length < concurrentNeed
-          ? `Only ${usable.length} judges for ${concurrentNeed} concurrent seats`
-          : usable.length < concurrentNeed * 1.5
-            ? 'Narrow availability windows could still make this fail.'
-            : undefined,
-    });
+      });
+    }
 
     checks.push({
       label: 'Total judge-sessions',
@@ -227,9 +203,9 @@ export default function ReadinessPlanner({
       sessionsNeeded,
       judgeSessionsNeeded,
       roomSlots,
-      anchors: anchors.length,
-      anchorsNeeded,
-      nonAnchors: nonAnchors.length,
+      anchors: mds.length,
+      anchorsNeeded: roomCount,
+      nonAnchors: igOthers.length,
       usable: usable.length,
       excludedCount,
       checks,

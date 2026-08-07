@@ -7,7 +7,11 @@ export class JudgePortalService {
   constructor(private prisma: PrismaService) {}
 
   generateToken(judgeId: string): string {
-    return crypto.createHash('sha256').update(judgeId + 'hackjudge-salt-2026').digest('hex').substring(0, 16);
+    // The salt is configurable but defaults to the original value, because
+    // changing it invalidates every judge link already sent. Set
+    // JUDGE_TOKEN_SALT before an event begins, never during one.
+    const salt = process.env.JUDGE_TOKEN_SALT || 'hackjudge-salt-2026';
+    return crypto.createHash('sha256').update(judgeId + salt).digest('hex').substring(0, 16);
   }
 
   async getJudgeByToken(token: string, eventId: string) {

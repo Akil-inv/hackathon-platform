@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { APP_GUARD } from '@nestjs/core';
@@ -33,12 +34,23 @@ import { EventScopeGuard } from './auth/event-scope.guard';
   controllers: [HealthController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    /**
+     * Rate limiting.
+     *
+     * Deliberately generous. Thirty-three judges polling every thirty seconds
+     * is normal use of this platform, and a judge throttled mid-event would
+     * have no idea why. The limit exists to stop credential stuffing and token
+     * enumeration, not to shape traffic.
+     */
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
       sortSchema: true,
-      playground: true,
-      introspection: true,
+      // On in development, off in production. Introspection publishes the whole
+      // schema, which is a map of the API for anyone who asks for it.
+      playground: process.env.NODE_ENV !== 'production',
+      introspection: process.env.NODE_ENV !== 'production',
       subscriptions: { 'graphql-ws': true },
       context: ({ req }: { req: Request }) => ({ req }),
     }),
@@ -64,6 +76,7 @@ import { EventScopeGuard } from './auth/event-scope.guard';
   ],
   providers: [
     HealthResolver,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     // After RolesGuard: role first, then whether this user may touch this

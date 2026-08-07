@@ -19,7 +19,7 @@ DELETE FROM session_judges;
 DELETE FROM judging_sessions;
 DELETE FROM ranking_results;
 DELETE FROM conflict_declarations;
-DELETE FROM judge_availabilities;
+DELETE FROM judge_availability;
 DELETE FROM judge_expertise;
 DELETE FROM judges;
 DELETE FROM teams;

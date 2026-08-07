@@ -380,7 +380,31 @@ export class ScoringTemplatesService {
     });
     if (!existing) throw new NotFoundException('Criterion not found');
 
-    await this.prisma.scoringCriterion.delete({ where: { id } });
+    // Score rows reference the criterion and do not cascade, so the delete would
+    // otherwise fail on a foreign key with nothing a coordinator could act on.
+    //
+    // Only rows on unsubmitted scorecards are removed. The criteria lock already
+    // refuses this once anything is submitted, and this is the second guard: a
+    // criterion that submitted scores were measured against is part of the
+    // record of how they were arrived at.
+    const scored = await this.prisma.criterionScore.count({
+      where: {
+        criterionId: id,
+        scorecard: { status: { in: ['SUBMITTED', 'RESUBMITTED', 'LOCKED'] } },
+      },
+    });
+
+    if (scored > 0) {
+      throw new BadRequestException(
+        `This criterion has been scored on ${scored} submitted scorecard(s). ` +
+        'Removing it would change what those scores measured.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.criterionScore.deleteMany({ where: { criterionId: id } });
+      await tx.scoringCriterion.delete({ where: { id } });
+    });
 
     await this.audit.log({
       userId, eventId: existing.template.eventId,

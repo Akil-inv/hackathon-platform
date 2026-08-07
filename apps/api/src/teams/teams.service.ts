@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@prisma/client';
@@ -208,7 +208,53 @@ export class TeamsService {
   }
   async delete(id: string, userId: string) {
     const team = await this.prisma.team.findUniqueOrThrow({ where: { id } });
-    await this.prisma.team.delete({ where: { id } });
+    // Five tables reference a team and none cascade, so a bare delete fails as
+    // soon as the team has any history — which is every team, once a schedule
+    // exists. Clearing teams to re-import a corrected spreadsheet is a
+    // reasonable thing to want to do.
+    const submitted = await this.prisma.scorecard.count({
+      where: {
+        teamId: id,
+        status: { in: ['SUBMITTED', 'RESUBMITTED', 'LOCKED'] },
+      },
+    });
+
+    if (submitted > 0) {
+      throw new BadRequestException(
+        `This team has ${submitted} submitted scorecard(s). Deleting it would ` +
+        'remove scores that have already counted toward the rankings.',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const cards = await tx.scorecard.findMany({
+        where: { teamId: id },
+        select: { id: true },
+      });
+      if (cards.length > 0) {
+        await tx.criterionScore.deleteMany({
+          where: { scorecardId: { in: cards.map(c => c.id) } },
+        });
+        await tx.scorecard.deleteMany({ where: { teamId: id } });
+      }
+
+      const sessions = await tx.judgingSession.findMany({
+        where: { teamId: id },
+        select: { id: true },
+      });
+      if (sessions.length > 0) {
+        await tx.sessionJudge.deleteMany({
+          where: { sessionId: { in: sessions.map(s => s.id) } },
+        });
+        await tx.judgingSession.deleteMany({ where: { teamId: id } });
+      }
+
+      await tx.rankingResult.deleteMany({ where: { teamId: id } });
+      await tx.conflictDeclaration.deleteMany({ where: { teamId: id } });
+      await tx.teamMember.deleteMany({ where: { teamId: id } });
+
+      await tx.team.delete({ where: { id } });
+    });
     await this.audit.log({ userId, eventId: team.eventId, action: 'DELETE' as any, entityType: 'Team', entityId: id, oldValues: { name: team.name }, reason: 'Team deleted' });
     return team;
   }
