@@ -28,3 +28,7 @@ docker-compose.override.yml
 # SonarQube scanner working directory and report output
 .scannerwork/
 sonar-issues-page-*.json
+
+# SonarQube scanner working directory and report output
+.scannerwork/
+sonar-issues-page-*.json
