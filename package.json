@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "@sonar/scan": "^5.0.0"
+  }
+}
