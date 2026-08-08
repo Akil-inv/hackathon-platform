@@ -24,3 +24,7 @@ docker-compose.override.yml
 *.bak-eventid
 .dev-logs/
 *.bak-*
+
+# SonarQube scanner working directory and report output
+.scannerwork/
+sonar-issues-page-*.json
