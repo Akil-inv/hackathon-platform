@@ -190,16 +190,27 @@ export class OperationsService {
 
     // Auto-create scorecards when session starts
     if (input.stage === "IN_PROGRESS") {
-      for (const sj of session.judges) {
-        const existing = await this.prisma.scorecard.findFirst({
-          where: { eventId: session.eventId, judgeId: sj.judgeId, teamId: session.teamId },
-        });
-        if (!existing) {
-          await this.prisma.scorecard.create({
-            data: { sessionId: session.id, judgeId: sj.judgeId, teamId: session.teamId, eventId: session.eventId },
-          });
-        }
-      }
+      // One write for the whole panel, with the database deciding uniqueness.
+      //
+      // The previous form read for an existing scorecard and then created one.
+      // Two clicks in quick succession both read nothing and both write, and
+      // the unique constraint surfaces that as a Prisma error at the moment a
+      // session is starting.
+      //
+      // It was also checking the wrong key: the read looked for any scorecard
+      // by this judge for this team in this event, while the constraint is on
+      // session and judge. A judge who had scored that team in a rescheduled
+      // session read as "exists" and got no scorecard for the session actually
+      // starting — they would open their portal and find nothing to score.
+      await this.prisma.scorecard.createMany({
+        data: session.judges.map((sj: any) => ({
+          sessionId: session.id,
+          judgeId: sj.judgeId,
+          teamId: session.teamId,
+          eventId: session.eventId,
+        })),
+        skipDuplicates: true,
+      });
     }
 
     await this.audit.log({
@@ -572,28 +583,26 @@ export class OperationsService {
         await tx.scorecard.deleteMany({ where: { id: { in: staleIds } } });
       }
 
-      // Create new scorecards for session A judges -> team B
-      for (const sj of a.judges) {
-        const exists = await tx.scorecard.findFirst({
-          where: { sessionId: a.id, judgeId: sj.judgeId },
-        });
-        if (!exists) {
-          await tx.scorecard.create({
-            data: { sessionId: a.id, judgeId: sj.judgeId, teamId: b.teamId, eventId: a.eventId },
-          });
-        }
-      }
-      // Create new scorecards for session B judges -> team A
-      for (const sj of b.judges) {
-        const exists = await tx.scorecard.findFirst({
-          where: { sessionId: b.id, judgeId: sj.judgeId },
-        });
-        if (!exists) {
-          await tx.scorecard.create({
-            data: { sessionId: b.id, judgeId: sj.judgeId, teamId: a.teamId, eventId: b.eventId },
-          });
-        }
-      }
+      // Scorecards for both sides in one write each.
+      //
+      // The previous form read for an existing row and then created one, which
+      // leaves a window where two concurrent swaps both see nothing and both
+      // write. `@@unique([sessionId, judgeId])` already guarantees uniqueness;
+      // skipDuplicates lets the database enforce it rather than the code
+      // guessing from a read taken a moment earlier.
+      await tx.scorecard.createMany({
+        data: a.judges.map((sj: any) => ({
+          sessionId: a.id, judgeId: sj.judgeId, teamId: b.teamId, eventId: a.eventId,
+        })),
+        skipDuplicates: true,
+      });
+
+      await tx.scorecard.createMany({
+        data: b.judges.map((sj: any) => ({
+          sessionId: b.id, judgeId: sj.judgeId, teamId: a.teamId, eventId: b.eventId,
+        })),
+        skipDuplicates: true,
+      });
     });
 
     await this.audit.log({
@@ -631,35 +640,50 @@ export class OperationsService {
 
     // Check all judges from A are available in B's slot and vice versa
     // Must exclude BOTH sessions being swapped from the busy check
-    for (const sj of a.judges) {
-      const busy = await this.prisma.sessionJudge.findFirst({
-        where: {
-          judgeId: sj.judgeId,
-          session: {
-            timeSlotId: b.timeSlotId,
-            id: { notIn: [a.id, b.id] },
-            stage: { notIn: ['CANCELLED', 'RESCHEDULED'] },
-          },
+    // Asked once rather than once per judge, so the error can name everyone who
+    // is busy. A coordinator told only about the first has to try the swap
+    // again to discover the second.
+    const aBusy = await this.prisma.sessionJudge.findMany({
+      where: {
+        judgeId: { in: a.judges.map((sj: any) => sj.judgeId) },
+        session: {
+          timeSlotId: b.timeSlotId,
+          id: { notIn: [a.id, b.id] },
+          stage: { notIn: ['CANCELLED', 'RESCHEDULED'] },
         },
-      });
-      if (busy) {
-        throw new BadRequestException(`Judge ${sj.judge.name} is busy in the target slot`);
-      }
+      },
+      select: { judgeId: true },
+    });
+
+    if (aBusy.length > 0) {
+      const busyIds = new Set(aBusy.map(x => x.judgeId));
+      const names = a.judges
+        .filter((sj: any) => busyIds.has(sj.judgeId))
+        .map((sj: any) => sj.judge.name);
+      throw new BadRequestException(
+        `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} busy in the target slot`,
+      );
     }
-    for (const sj of b.judges) {
-      const busy = await this.prisma.sessionJudge.findFirst({
-        where: {
-          judgeId: sj.judgeId,
-          session: {
-            timeSlotId: a.timeSlotId,
-            id: { notIn: [a.id, b.id] },
-            stage: { notIn: ['CANCELLED', 'RESCHEDULED'] },
-          },
+    const bBusy = await this.prisma.sessionJudge.findMany({
+      where: {
+        judgeId: { in: b.judges.map((sj: any) => sj.judgeId) },
+        session: {
+          timeSlotId: a.timeSlotId,
+          id: { notIn: [a.id, b.id] },
+          stage: { notIn: ['CANCELLED', 'RESCHEDULED'] },
         },
-      });
-      if (busy) {
-        throw new BadRequestException(`Judge ${sj.judge.name} is busy in the target slot`);
-      }
+      },
+      select: { judgeId: true },
+    });
+
+    if (bBusy.length > 0) {
+      const busyIds = new Set(bBusy.map(x => x.judgeId));
+      const names = b.judges
+        .filter((sj: any) => busyIds.has(sj.judgeId))
+        .map((sj: any) => sj.judge.name);
+      throw new BadRequestException(
+        `${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} busy in the target slot`,
+      );
     }
 
     const aSlot = a.timeSlotId;

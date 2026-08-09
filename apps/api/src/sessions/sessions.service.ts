@@ -87,8 +87,18 @@ export class SessionsService {
       }
     }
 
+    // Every slot in one query rather than one per session. Publishing a
+    // schedule creates every session at once, so this loop runs once per team —
+    // 79 sequential round trips on a real event, inside the operation a
+    // coordinator is waiting on after a solve.
+    const slotIds = [...new Set(inputs.map(i => i.timeSlotId).filter(Boolean))];
+    const slotRows = slotIds.length
+      ? await this.prisma.timeSlot.findMany({ where: { id: { in: slotIds } } })
+      : [];
+    const slotById = new Map(slotRows.map(s => [s.id, s]));
+
     for (const input of inputs) {
-      const slot = await this.prisma.timeSlot.findUnique({ where: { id: input.timeSlotId } });
+      const slot = slotById.get(input.timeSlotId);
 
       const session = await this.prisma.judgingSession.create({
         data: {
