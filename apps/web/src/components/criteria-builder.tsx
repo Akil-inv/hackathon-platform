@@ -122,7 +122,7 @@ export default function CriteriaBuilder({
             Five categories, twelve scoring rows, totalling 100 points. Everything it creates is
             editable afterwards.
           </div>
-          <button className="btn btn-pri btn-sm" disabled={busy} onClick={() => onLoadRubric()}>
+          <button type="button" className="btn btn-pri btn-sm" disabled={busy} onClick={() => onLoadRubric()}>
             Load standard rubric
           </button>
         </div>
@@ -185,10 +185,10 @@ export default function CriteriaBuilder({
                     value={draft.maxScore}
                     onChange={(e) => setDraft({ ...draft, maxScore: Number(e.target.value) })}
                   />
-                  <button className="btn btn-pri btn-sm" onClick={() => commitEdit(cat)}>
+                  <button type="button" className="btn btn-pri btn-sm" onClick={() => commitEdit(cat)}>
                     Save
                   </button>
-                  <button className="btn btn-sec btn-sm" onClick={() => setEditing(null)}>
+                  <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditing(null)}>
                     Cancel
                   </button>
                 </>
@@ -208,10 +208,10 @@ export default function CriteriaBuilder({
                     {remaining > 0 && ` · ${remaining} left`}
                     {over && ` · ${-remaining} over`}
                   </span>
-                  <button className="btn btn-sec btn-sm" onClick={() => startEdit(cat)}>
+                  <button type="button" className="btn btn-sec btn-sm" onClick={() => startEdit(cat)}>
                     Edit
                   </button>
-                  <button
+                  <button type="button"
                     className="btn btn-danger btn-sm"
                     onClick={() => onRemove(cat.id, cat.name)}
                   >
@@ -249,10 +249,10 @@ export default function CriteriaBuilder({
                         value={draft.maxScore}
                         onChange={(e) => setDraft({ ...draft, maxScore: Number(e.target.value) })}
                       />
-                      <button className="btn btn-pri btn-sm" onClick={() => commitEdit(r)}>
+                      <button type="button" className="btn btn-pri btn-sm" onClick={() => commitEdit(r)}>
                         Save
                       </button>
-                      <button className="btn btn-sec btn-sm" onClick={() => setEditing(null)}>
+                      <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditing(null)}>
                         Cancel
                       </button>
                     </>
@@ -291,10 +291,10 @@ export default function CriteriaBuilder({
                       >
                         {r.maxScore}
                       </span>
-                      <button className="btn btn-sec btn-sm" onClick={() => startEdit(r)}>
+                      <button type="button" className="btn btn-sec btn-sm" onClick={() => startEdit(r)}>
                         Edit
                       </button>
-                      <button
+                      <button type="button"
                         className="btn btn-danger btn-sm"
                         onClick={() => onRemove(r.id, r.name)}
                       >
@@ -365,7 +365,7 @@ export default function CriteriaBuilder({
                   style={{ marginTop: 6 }}
                 />
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                  <button
+                  <button type="button"
                     className="btn btn-pri btn-sm"
                     disabled={busy || !newRow.name.trim() || newRow.maxScore < 1}
                     onClick={async () => {
@@ -381,14 +381,14 @@ export default function CriteriaBuilder({
                   >
                     Add row
                   </button>
-                  <button className="btn btn-sec btn-sm" onClick={() => setOpenRowForm(null)}>
+                  <button type="button" className="btn btn-sec btn-sm" onClick={() => setOpenRowForm(null)}>
                     Close
                   </button>
                 </div>
               </div>
             ) : (
               <div style={{ padding: '8px 12px 8px 28px', borderTop: '0.5px solid rgba(255,255,255,0.05)' }}>
-                <button
+                <button type="button"
                   className="btn btn-sec btn-sm"
                   onClick={() => {
                     setOpenRowForm(cat.id);
@@ -507,7 +507,7 @@ function CategoryForm({
           </span>
         </div>
       </div>
-      <button
+      <button type="button"
         className="btn btn-pri btn-sm"
         style={{ marginTop: 8 }}
         disabled={busy || !value.name.trim() || value.maxScore < 1}

@@ -122,7 +122,7 @@ export default function TeamsPage() {
               {uniqueTracks.map(t => <option key={t} value={`track:${t}`}>{t}</option>)}
             </optgroup>
           </select>
-          <button onClick={() => setShowUpload(!showUpload)}
+          <button type="button" onClick={() => setShowUpload(!showUpload)}
             className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg shadow-lg shadow-accent/20">
             {showUpload ? 'Close upload' : '+ Upload CSV'}
           </button>
@@ -212,11 +212,11 @@ export default function TeamsPage() {
           {/* Upload button */}
           {file && (
             <div className="mt-4 flex items-center gap-3">
-              <button onClick={uploadCSV} disabled={uploading}
+              <button type="button" onClick={uploadCSV} disabled={uploading}
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg disabled:opacity-50">
                 {uploading ? 'Uploading...' : `Import ${preview.length}+ teams`}
               </button>
-              <button onClick={() => { setFile(null); setPreview([]); setHeaders([]); setResult(null); }}
+              <button type="button" onClick={() => { setFile(null); setPreview([]); setHeaders([]); setResult(null); }}
                 className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">
                 Clear
               </button>
@@ -241,7 +241,7 @@ export default function TeamsPage() {
 
           {/* Download template */}
           <div className="mt-4 pt-4 border-t border-dark-600">
-            <button onClick={() => {
+            <button type="button" onClick={() => {
               const csv = expectedColumns.map(c => c.key).join(',') + '\nTeam Alpha,Smart Onboarding,John Doe,john@example.com,Customer Experience,Retail Banking,Group Retail,AI Onboarding,Python Azure,Microsoft Azure,Singapore';
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);

@@ -11,7 +11,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "test:cov": "jest --coverage"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",
@@ -63,5 +64,16 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
+  },
+  "overrides": {
+    "body-parser": "^1.20.6",
+    "express": "^4.21.2",
+    "qs": "^6.13.0",
+    "ws": ">=8.20.2",
+    "lodash": "^4.17.21",
+    "brace-expansion": "^2.0.2",
+    "fast-uri": "^3.0.6",
+    "js-yaml": "^4.1.0",
+    "multer": "$multer"
   }
 }

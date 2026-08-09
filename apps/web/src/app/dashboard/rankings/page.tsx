@@ -71,7 +71,7 @@ function MethodologyModal({ onClose }: { onClose: () => void }) {
               How indicative rankings are calculated
             </p>
           </div>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: 'none', border: 'none', color: '#64748b', fontSize: 20, cursor: 'pointer', padding: '4px',
           }}>✕</button>
         </div>
@@ -223,7 +223,7 @@ function MethodologyModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <button
+        <button type="button"
           onClick={onClose}
           style={{
             width: '100%', padding: '10px', borderRadius: 8, fontSize: 14, fontWeight: 500,
@@ -386,7 +386,7 @@ export default function RankingsPage() {
               Indicative leaderboard — final calibration done offline
             </p>
           </div>
-          <button
+          <button type="button"
             onClick={() => setShowMethodology(true)}
             title="Scoring methodology"
             style={{
@@ -410,14 +410,14 @@ export default function RankingsPage() {
 
       {/* Track tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, flexWrap: 'wrap' }}>
-        <button onClick={() => setSelectedTrack(null)}
+        <button type="button" onClick={() => setSelectedTrack(null)}
           style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none',
             background: selectedTrack === null ? 'rgba(96,165,250,0.15)' : 'transparent',
             color: selectedTrack === null ? '#60a5fa' : '#94a3b8' }}>
           Overall
         </button>
         {tracks.map(t => (
-          <button key={t.id} onClick={() => setSelectedTrack(t.id)}
+          <button type="button" key={t.id} onClick={() => setSelectedTrack(t.id)}
             style={{ padding: '7px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none',
               background: selectedTrack === t.id ? 'rgba(96,165,250,0.15)' : 'transparent',
               color: selectedTrack === t.id ? '#60a5fa' : '#94a3b8' }}>
@@ -448,33 +448,33 @@ export default function RankingsPage() {
         <div style={{ display: 'flex', gap: 8 }}>
           {rankings.length > 0 && (
             <>
-              <button onClick={exportAllData}
+              <button type="button" onClick={exportAllData}
                 style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
                   background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)', cursor: 'pointer' }}>
                 Export All Data
               </button>
-              <button onClick={exportRankingsCSV}
+              <button type="button" onClick={exportRankingsCSV}
                 style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
                   background: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: '1px solid rgba(100,116,139,0.3)', cursor: 'pointer' }}>
                 Export Rankings
               </button>
             </>
           )}
-          <button onClick={() => runMutation(CALCULATE_M, 'calculateRankings')} disabled={loading}
+          <button type="button" onClick={() => runMutation(CALCULATE_M, 'calculateRankings')} disabled={loading}
             style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
               background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)',
               cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1 }}>
             {loading ? 'Calculating...' : data ? 'Recalculate' : 'Calculate rankings'}
           </button>
           {status === 'PROVISIONAL' && (
-            <button onClick={() => runMutation(APPROVE_M, 'approveRankings')} disabled={loading}
+            <button type="button" onClick={() => runMutation(APPROVE_M, 'approveRankings')} disabled={loading}
               style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
                 background: 'rgba(52,211,153,0.15)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)', cursor: 'pointer' }}>
               Approve
             </button>
           )}
           {status === 'APPROVED' && (
-            <button onClick={() => { if (confirm('Publish these rankings? This makes them final.')) runMutation(PUBLISH_M, 'publishRankings'); }} disabled={loading}
+            <button type="button" onClick={() => { if (confirm('Publish these rankings? This makes them final.')) runMutation(PUBLISH_M, 'publishRankings'); }} disabled={loading}
               style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
                 background: 'rgba(96,165,250,0.15)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.3)', cursor: 'pointer' }}>
               Publish
@@ -487,7 +487,7 @@ export default function RankingsPage() {
       {error && (
         <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#f87171', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           {error}
-          <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
+          <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
         </div>
       )}
 
@@ -547,7 +547,7 @@ export default function RankingsPage() {
                   </div>
                   <div style={{ textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>{r.judgeCount}</div>
                   <div style={{ textAlign: 'center' }}>
-                    <button onClick={() => setExpandedTeam(isExpanded ? null : r.teamId)}
+                    <button type="button" onClick={() => setExpandedTeam(isExpanded ? null : r.teamId)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: 18,
                         transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>
                       ▾

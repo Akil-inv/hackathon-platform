@@ -139,7 +139,7 @@ export default function JudgeLinksPage() {
           <p className="text-sm text-slate-400 mt-1">Send each judge their personal schedule link</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowConfig(!showConfig)}
+          <button type="button" onClick={() => setShowConfig(!showConfig)}
             className={`px-4 py-2 text-sm rounded-lg border transition-all ${
               config.configured
                 ? 'bg-green-500/10 border-green-500/20 text-green-400'
@@ -147,12 +147,12 @@ export default function JudgeLinksPage() {
             }`}>
             {config.configured ? `✓ ${config.provider.toUpperCase()} configured` : '⚙ Configure notifications'}
           </button>
-          <button onClick={copyAll}
+          <button type="button" onClick={copyAll}
             className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">
             {copied === 'all' ? '✓ Copied all' : 'Copy all links'}
           </button>
           {config.configured && (
-            <button onClick={sendAll}
+            <button type="button" onClick={sendAll}
               className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg shadow-lg shadow-accent/20">
               Send to all judges
             </button>
@@ -235,11 +235,11 @@ export default function JudgeLinksPage() {
           </div>
 
           <div className="flex gap-3 mt-4 pt-4 border-t border-dark-600">
-            <button onClick={saveConfig}
+            <button type="button" onClick={saveConfig}
               className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm rounded-lg">
               Save configuration
             </button>
-            <button onClick={() => setShowConfig(false)}
+            <button type="button" onClick={() => setShowConfig(false)}
               className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">
               Cancel
             </button>
@@ -251,7 +251,7 @@ export default function JudgeLinksPage() {
       <div className="mb-6 rounded-xl border border-dark-600 bg-dark-800/50 p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-white">Email / SMS template</h3>
-          <button onClick={() => {
+          <button type="button" onClick={() => {
             const template = `Dear [Judge Name],\n\nYou have been invited to judge ${eventName}.\n\nYour personal schedule and scoring portal:\n[Judge Link]\n\nThis link contains your session times, room assignments, and team details. On event day, you will use this link to enter scores.\n\nPlease review your schedule before the event.\n\nThank you,\n${eventName} Team`;
             navigator.clipboard.writeText(template);
             setCopied('template');
@@ -316,12 +316,12 @@ ${eventName} Team`}
                   className="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">
                   Preview
                 </a>
-                <button onClick={() => copyLink(link)}
+                <button type="button" onClick={() => copyLink(link)}
                   className="px-3 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">
                   {copied === link.judgeId ? '✓ Copied' : 'Copy'}
                 </button>
                 {config.configured && (
-                  <button onClick={() => sendNotification(link)} disabled={isSending || isSent}
+                  <button type="button" onClick={() => sendNotification(link)} disabled={isSending || isSent}
                     className={`px-3 py-2 text-sm rounded-lg transition-all ${
                       isSent ? 'bg-green-500/10 text-green-400 border border-green-500/20'
                         : 'bg-accent hover:bg-accent/90 text-white shadow-lg shadow-accent/20'

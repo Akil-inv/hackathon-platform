@@ -264,14 +264,14 @@ export default function DashboardPage() {
     const slotTimes = [...new Set(sessions.map((s: any) => {
       if (!s.scheduledStart) return null;
       return new Date(s.scheduledStart).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false });
-    }).filter(Boolean))].sort() as string[];
+    }).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b))) as string[];
 
     const eventDates = [...new Set(sessions.map((s: any) => {
       if (!s.scheduledStart) return null;
       return new Date(s.scheduledStart).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' });
-    }).filter(Boolean))].sort() as string[];
+    }).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b))) as string[];
 
-    const rNames = rooms.map((r: any) => r.name).sort();
+    const rNames = rooms.map((r: any) => r.name).sort((a, b) => String(a).localeCompare(String(b)));
     // Only show rooms that have sessions
     const activeRoomNames = rNames.filter(r => sessions.some((s: any) => s.roomName === r));
 
@@ -437,7 +437,7 @@ export default function DashboardPage() {
                       <div key={ti} title={`${track}: ${count}`} style={{
                         width: `${pct}%`, background: stats.trackColors[track] || '#6b7a90',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 8, color: '#fff', fontWeight: 600, minWidth: pct > 15 ? 0 : 0,
+                        fontSize: 8, color: '#fff', fontWeight: 600, minWidth: 0,
                       }}>
                         {pct > 20 ? count as number : ''}
                       </div>

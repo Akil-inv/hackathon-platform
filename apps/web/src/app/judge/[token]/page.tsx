@@ -1,9 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import StatusBadge from '@/components/status-badge';
 import DriftMetronome from '@/components/drift-metronome';
-import CountryFlag from '@/components/country-flag';
 import QuadrantView from '@/components/quadrant-view';
 import { platformColor } from '@/components/platform-chip';
 import UseCasePanel from '@/components/use-case-panel';
@@ -248,7 +246,7 @@ export default function JudgePortalPage() {
               </p>
               <p className="mt-1 text-sm text-slate-500">— {schedule.message.sentByName}</p>
             </div>
-            <button
+            <button type="button"
               onClick={async () => {
                 await fetch(`${apiUrl}/api/judge-portal/${token}/dismiss-message?event=${eventId}`, {
                   method: 'POST',
@@ -311,7 +309,7 @@ export default function JudgePortalPage() {
                   <p className="text-3xl font-bold text-slate-900">{totalScore}</p>
                   <p className="text-sm text-slate-500">of 100</p>
                 </div>
-                <button
+                <button type="button"
                   onClick={async () => {
                     const next = !activeScorecard.flaggedForReview;
                     setActiveScorecard({ ...activeScorecard, flaggedForReview: next });
@@ -331,7 +329,7 @@ export default function JudgePortalPage() {
                 >
                   {activeScorecard.flaggedForReview ? 'Flagged' : 'Flag for review'}
                 </button>
-                <button onClick={() => setActiveScorecard(null)} className="text-slate-500 hover:text-slate-900 text-2xl">✕</button>
+                <button type="button" onClick={() => setActiveScorecard(null)} className="text-slate-500 hover:text-slate-900 text-2xl">✕</button>
               </div>
             </div>
 
@@ -467,11 +465,11 @@ export default function JudgePortalPage() {
               </div>
               {!['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status) ? (
                 <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                  <button onClick={() => saveOrSubmit(false)} disabled={saving}
+                  <button type="button" onClick={() => saveOrSubmit(false)} disabled={saving}
                     className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 text-base rounded-lg disabled:opacity-50">
                     {saving ? 'Saving...' : 'Save draft'}
                   </button>
-                  <button onClick={() => saveOrSubmit(true)} disabled={saving}
+                  <button type="button" onClick={() => saveOrSubmit(true)} disabled={saving}
                     className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white text-base font-medium rounded-lg disabled:opacity-50">
                     {saving ? 'Submitting...' : 'Submit scorecard'}
                   </button>

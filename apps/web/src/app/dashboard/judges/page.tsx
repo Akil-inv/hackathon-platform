@@ -156,7 +156,7 @@ export default function JudgesPage() {
               {uniqueAffilNames.map(n => <option key={n} value={n}>{n.replace(':', ' · ')}</option>)}
             </optgroup>
           </select>
-          <button onClick={() => setShowUpload(!showUpload)}
+          <button type="button" onClick={() => setShowUpload(!showUpload)}
             className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg shadow-lg shadow-accent/20">
             {showUpload ? 'Close upload' : '+ Upload CSV'}
           </button>
@@ -247,11 +247,11 @@ export default function JudgesPage() {
 
           {file && (
             <div className="mt-4 flex items-center gap-3">
-              <button onClick={uploadCSV} disabled={uploading}
+              <button type="button" onClick={uploadCSV} disabled={uploading}
                 className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-sm font-medium rounded-lg disabled:opacity-50">
                 {uploading ? 'Uploading...' : `Import ${preview.length}+ judges`}
               </button>
-              <button onClick={() => { setFile(null); setPreview([]); setHeaders([]); setResult(null); }}
+              <button type="button" onClick={() => { setFile(null); setPreview([]); setHeaders([]); setResult(null); }}
                 className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-sm rounded-lg border border-dark-500">Clear</button>
             </div>
           )}
@@ -263,7 +263,7 @@ export default function JudgesPage() {
           )}
 
           <div className="mt-4 pt-4 border-t border-dark-600">
-            <button onClick={() => {
+            <button type="button" onClick={() => {
               const csv = 'name,email,phone,designation,judge_type,affiliation_type,affiliation_name,max_sessions\nDr. Sarah Kim,sarah.kim@uob.com,+6591234567,VP Technology,TECHNICAL,BU,GRB,8\nJames Tan,james.tan@uob.com,+6598765432,Director Innovation,INNOVATION,IG,Innovation Guild,6\nMike Chen,mike@aws.com,+6587654321,Solutions Architect,TECHNICAL,VENDOR,AWS,4';
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = URL.createObjectURL(blob);

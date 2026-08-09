@@ -59,7 +59,7 @@ export default function UseCasePanel({
             </div>
             {when && <p className="text-sm text-slate-500">{when}{data.room ? ` · ${data.room}` : ''}</p>}
           </div>
-          <button
+          <button type="button"
             onClick={onClose}
             className="shrink-0 rounded-xl bg-slate-900 px-5 py-2.5 text-base font-medium text-white hover:bg-slate-800"
           >

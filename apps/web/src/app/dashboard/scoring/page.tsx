@@ -255,15 +255,15 @@ export default function ScoringPage() {
                       {/* Actions */}
                       <div className="sc-actions">
                         {isSubmitted && sc.status !== 'LOCKED' && (
-                          <button className="sc-btn" style={{background:'rgba(245,158,11,0.08)',borderColor:'rgba(245,158,11,0.2)',color:'#f59e0b'}}
+                          <button type="button" className="sc-btn" style={{background:'rgba(245,158,11,0.08)',borderColor:'rgba(245,158,11,0.2)',color:'#f59e0b'}}
                             onClick={() => reopenScorecard(sc.id)}>Reopen</button>
                         )}
                         {sc.status === 'NOT_STARTED' && (
-                          <button className="sc-btn" style={{background:'rgba(124,58,237,0.08)',borderColor:'rgba(124,58,237,0.2)',color:'#a78bfa'}}
+                          <button type="button" className="sc-btn" style={{background:'rgba(124,58,237,0.08)',borderColor:'rgba(124,58,237,0.2)',color:'#a78bfa'}}
                             onClick={() => show('Reminder sent (notification system pending)')}>Send reminder</button>
                         )}
                         {sc.status === 'DRAFT' && (
-                          <button className="sc-btn" style={{background:'rgba(245,158,11,0.08)',borderColor:'rgba(245,158,11,0.2)',color:'#f59e0b'}}
+                          <button type="button" className="sc-btn" style={{background:'rgba(245,158,11,0.08)',borderColor:'rgba(245,158,11,0.2)',color:'#f59e0b'}}
                             onClick={() => show('Reminder sent (notification system pending)')}>Nudge to submit</button>
                         )}
                       </div>

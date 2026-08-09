@@ -16,7 +16,6 @@ whether it is *legal* is not, and that is what is worth pinning down.
     pytest -v
 """
 
-import pytest
 
 from src.models import ScheduleRequest, TeamInput, JudgeInput, SlotInput, RoomInput
 from src.solver import generate_schedule

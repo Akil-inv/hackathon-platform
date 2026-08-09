@@ -229,7 +229,7 @@ export default function QuadrantView({
   }) => {
     const f = FINISH[kind];
     return (
-      <button
+      <button type="button"
         onClick={() => open(kind)}
         style={cardStyle(f)}
         className="group flex h-full flex-col rounded-2xl p-3.5 sm:p-5 min-h-[122px] sm:min-h-[212px] text-left w-full transition-transform duration-200 hover:-translate-y-1"
@@ -293,12 +293,12 @@ export default function QuadrantView({
     if (pages <= 1) return null;
     return (
       <div className="flex items-center gap-3 mt-4">
-        <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+        <button type="button" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
           className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40">
           Back
         </button>
         <span className="text-sm text-slate-500">{page + 1} of {pages}</span>
-        <button onClick={() => setPage(p => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1}
+        <button type="button" onClick={() => setPage(p => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1}
           className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40">
           Next
         </button>
@@ -325,7 +325,7 @@ export default function QuadrantView({
                 <p className="text-lg sm:text-2xl font-semibold text-slate-900 truncate">{g.live.s.team.name}</p>
                 <CountryFlag code={g.live.s.team.country} size={18} />
                 {onInfo && (
-                  <button
+                  <button type="button"
                     onClick={(e) => { e.stopPropagation(); onInfo(g.live!.s.sessionId); }}
                     title="What is this team presenting?"
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-300 text-sm font-serif italic text-slate-600 hover:border-slate-400 hover:text-slate-900"
@@ -335,7 +335,7 @@ export default function QuadrantView({
               {/* The project name is context a judge already has in the room. */}
               <p className="hidden sm:block text-base text-slate-600 truncate mt-0.5">{g.live.s.team.projectName}</p>
             </div>
-            <button
+            <button type="button"
               onClick={() => onScore(g.live!.s.sessionId)}
               className="shrink-0 rounded-xl bg-slate-900 px-5 sm:px-7 py-2.5 sm:py-3.5 text-base font-medium text-white hover:bg-slate-800"
             >
@@ -345,7 +345,7 @@ export default function QuadrantView({
             {/* Only an MD sees this, because only an MD may. A control that
                 appears and then fails is worse than one that is absent. */}
             {onBreak && (
-              <button
+              <button type="button"
                 onClick={() => onBreak(g.live!.s.sessionId, true)}
                 className="shrink-0 rounded-xl border border-slate-300 bg-white px-4 py-2.5 sm:py-3.5 text-base text-slate-600 hover:text-slate-900"
               >Step out</button>
@@ -430,7 +430,7 @@ export default function QuadrantView({
               <p style={{ color: panelFinish.ink }} className="text-base font-semibold tracking-wide">
                 {panel === 'needs' ? 'AWAITING YOUR SUBMISSION' : panel === 'next' ? 'UP NEXT' : panel === 'done' ? 'DONE' : 'REVISIT'}
               </p>
-              <button onClick={() => setPanel(null)}
+              <button type="button" onClick={() => setPanel(null)}
                 style={{ color: panelFinish.ink, borderColor: panelFinish.edge }}
                 className="ml-auto rounded-lg border bg-white/70 px-3.5 py-1.5 text-sm font-medium">
                 Close
@@ -453,7 +453,7 @@ export default function QuadrantView({
                         {c?.status === 'DRAFT' ? 'half scored' : 'not started'}
                       </p>
                     </div>
-                    <button onClick={() => startQueue(page * PAGE_SIZE + i)}
+                    <button type="button" onClick={() => startQueue(page * PAGE_SIZE + i)}
                       className="shrink-0 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800">
                       {c?.status === 'DRAFT' ? 'Finish' : 'Score'}
                     </button>
@@ -481,7 +481,7 @@ export default function QuadrantView({
                       <p className="text-sm text-slate-500 mt-0.5">{dayOf(s.startTime)} · {s.room}</p>
                     </div>
                     {onInfo && (
-                      <button
+                      <button type="button"
                         onClick={() => onInfo(s.sessionId)}
                         title="What is this team presenting?"
                         className="shrink-0 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900"
@@ -507,7 +507,7 @@ export default function QuadrantView({
                       <p className="text-sm text-slate-500 mt-0.5">{dayOf(s.startTime)} · {timeOf(s.startTime)}</p>
                     </div>
                     <span className="shrink-0 font-mono text-xl text-slate-900">{c?.totalScore}</span>
-                    <button onClick={() => onScore(s.sessionId)}
+                    <button type="button" onClick={() => onScore(s.sessionId)}
                       className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700">
                       View
                     </button>
@@ -530,7 +530,7 @@ export default function QuadrantView({
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">{dayOf(s.startTime)} · {timeOf(s.startTime)}</p>
                     </div>
-                    <button onClick={() => onScore(s.sessionId)}
+                    <button type="button" onClick={() => onScore(s.sessionId)}
                       className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700">
                       Open
                     </button>

@@ -74,7 +74,7 @@ export function allocateAnchors(
   // Slots carrying an extra L3 so the anchor may step out.
   const coverSlotIds: string[] = [];
 
-  const dates = [...slotsByDate.keys()].sort();
+  const dates = [...slotsByDate.keys()].sort((a, b) => String(a).localeCompare(String(b)));
 
   if (l2.length === 0) {
     warnings.push('No L2 judges. Every session will be anchored by an L3 or L4.');

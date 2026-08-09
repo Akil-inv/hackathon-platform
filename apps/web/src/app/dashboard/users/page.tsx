@@ -260,7 +260,7 @@ export default function UsersPage() {
               : 'Select an event in the sidebar to assign event roles.'}
           </p>
         </div>
-        <button
+        <button type="button"
           onClick={() => setShowCreate((v) => !v)}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-lg shadow-accent/20 hover:bg-accent/90"
         >
@@ -344,14 +344,14 @@ export default function UsersPage() {
             </div>
           </div>
           <div className="mt-5 flex gap-3 border-t border-dark-600 pt-4">
-            <button
+            <button type="button"
               onClick={createUser}
               disabled={busy === 'create'}
               className="rounded-lg bg-accent px-4 py-2 text-sm text-white hover:bg-accent/90 disabled:opacity-50"
             >
               {busy === 'create' ? 'Creating…' : 'Create user'}
             </button>
-            <button
+            <button type="button"
               onClick={() => setShowCreate(false)}
               className="rounded-lg border border-dark-500 bg-dark-700 px-4 py-2 text-sm text-white hover:bg-dark-600"
             >
@@ -419,7 +419,7 @@ export default function UsersPage() {
                           </option>
                         ))}
                       </select>
-                      <button
+                      <button type="button"
                         onClick={() => assignRole(user)}
                         disabled={!eventId || busy === `assign-${user.id}`}
                         className="rounded-lg bg-accent/90 px-2.5 py-1.5 text-xs text-white hover:bg-accent disabled:opacity-40"
@@ -432,7 +432,7 @@ export default function UsersPage() {
                               ? 'Reassign'
                               : 'Assign'}
                       </button>
-                      <button
+                      <button type="button"
                         onClick={() => removeRole(user)}
                         disabled={!eventId || !savedRole || busy === `remove-${user.id}`}
                         className="rounded-lg border border-dark-500 bg-dark-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-dark-600 disabled:opacity-30"
@@ -443,14 +443,14 @@ export default function UsersPage() {
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      <button
+                      <button type="button"
                         onClick={() => resetPassword(user)}
                         disabled={busy === `reset-${user.id}`}
                         className="rounded-lg border border-dark-500 bg-dark-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-dark-600 disabled:opacity-40"
                       >
                         Reset password
                       </button>
-                      <button
+                      <button type="button"
                         onClick={() => deleteUser(user)}
                         disabled={isSelf || busy === `delete-${user.id}`}
                         title={isSelf ? 'You cannot delete your own account' : undefined}

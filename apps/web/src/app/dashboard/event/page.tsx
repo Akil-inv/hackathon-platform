@@ -203,7 +203,7 @@ export default function EventSetupPage() {
         counts.set(key, (counts.get(key) ?? 0) + 1);
       }
     }
-    return [...counts.entries()].sort().map(([date, count]) => ({ date, count }));
+    return [...counts.entries()].sort((a, b) => String(a).localeCompare(String(b))).map(([date, count]) => ({ date, count }));
   })();
 
   // Step completion checks
@@ -386,12 +386,12 @@ export default function EventSetupPage() {
             onClick={() => { if (true) toggleStep(1, s1); }}>
           <div style={stepStyle(1, s1, true, editingStep === 1).circle}>{(s1 && editingStep !== 1) ? '\u2713' : 1}</div>
           <span style={stepStyle(1, s1, true, editingStep === 1).title}>Create event</span>
-          {s1 && editingStep !== 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(1)}>Edit</button>}
-          {editingStep === 1 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s1 && editingStep !== 1 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(1)}>Edit</button>}
+          {editingStep === 1 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s1 && editingStep !== 1 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(1, s1) ? '\u25B4' : '\u25BE'}</span>
           {s1 && editingStep !== 1 && (
-            <button className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
+            <button type="button" className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
               onClick={() => {
                 // Blank the form. An effect prefills `ef` from the current
                 // event, so without this the create form opens holding the
@@ -406,7 +406,7 @@ export default function EventSetupPage() {
             </button>
           )}
           {creatingNew && (
-            <button className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
+            <button type="button" className="btn btn-sec btn-sm" style={{ marginLeft: 'auto' }}
               onClick={() => setCreatingNew(false)}>
               Cancel new event
             </button>
@@ -443,7 +443,7 @@ export default function EventSetupPage() {
                 <div><div className="lbl" style={{marginBottom:4}}>Max judges</div><input type="number" className="inp" value={ef.maxJudgesPerTeam} onChange={e => setEf({...ef, maxJudgesPerTeam: Number(e.target.value)})} /></div>
               </div>
             </div>
-            <button className="btn btn-pri" style={{marginTop:14}} onClick={async () => {
+            <button type="button" className="btn btn-pri" style={{marginTop:14}} onClick={async () => {
               if (!ef.name || !ef.startDate || !ef.endDate) { show('Name and dates required', 'err'); return; }
               if (s1) {
                 const input: any = { name: ef.name, description: ef.description, location: ef.location, timezone: ef.timezone,
@@ -491,8 +491,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1) toggleStep(2, s2); }}>
           <div style={stepStyle(2, s2, s1, editingStep === 2).circle}>{(s2 && editingStep !== 2) ? '\u2713' : 2}</div>
           <span style={stepStyle(2, s2, s1, editingStep === 2).title}>{`Scoring criteria (${criteria.length}) — ${totalPoints}/100 pts`}</span>
-          {s2 && s1 && editingStep !== 2 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(2)}>Edit</button>}
-          {editingStep === 2 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s2 && s1 && editingStep !== 2 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(2)}>Edit</button>}
+          {editingStep === 2 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s2 && editingStep !== 2 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(2, s2) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -554,8 +554,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1 && s2) toggleStep(3, s3); }}>
           <div style={stepStyle(3, s3, s1 && s2, editingStep === 3).circle}>{(s3 && editingStep !== 3) ? '\u2713' : 3}</div>
           <span style={stepStyle(3, s3, s1 && s2, editingStep === 3).title}>{`Challenge tracks (${tracks.length})`}</span>
-          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
-          {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
+          {editingStep === 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s3 && editingStep !== 3 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(3, s3) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -563,13 +563,13 @@ export default function EventSetupPage() {
         {tracks.map(t => (
           <div className="item" key={t.id}>
             <div><span className="item-name">{t.name}</span>{t.description && <div className="item-sub">{t.description}</div>}</div>
-            <button className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Remove "${t.name}"?`)) return; await run(DELETE_TRACK, { id: t.id }); show(`"${t.name}" removed`); reload(); }}>Remove</button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Remove "${t.name}"?`)) return; await run(DELETE_TRACK, { id: t.id }); show(`"${t.name}" removed`); reload(); }}>Remove</button>
           </div>
         ))}
         <div className="add-row">
           <input className="inp" placeholder="Track name" value={newTrack.name} onChange={e => setNewTrack({...newTrack, name: e.target.value})} style={{flex:2}} />
           <input className="inp" placeholder="Description" value={newTrack.description} onChange={e => setNewTrack({...newTrack, description: e.target.value})} style={{flex:3}} />
-          <button className="btn btn-pri btn-sm" onClick={async () => {
+          <button type="button" className="btn btn-pri btn-sm" onClick={async () => {
             if (!newTrack.name.trim()) return;
             await run(CREATE_TRACK, { input: { eventId, name: newTrack.name.trim(), description: newTrack.description } });
             show(`"${newTrack.name}" added`); setNewTrack({ name: '', description: '' }); reload();
@@ -585,8 +585,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1 && s2 && s3) toggleStep(4, s4); }}>
           <div style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).circle}>{(s4 && editingStep !== 4) ? '\u2713' : 4}</div>
           <span style={stepStyle(4, s4, s1 && s2 && s3, editingStep === 4).title}>{`Teams (${teams.length})`}</span>
-          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
-          {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
+          {editingStep === 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s4 && editingStep !== 4 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(4, s4) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -597,7 +597,7 @@ export default function EventSetupPage() {
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                 {tracks.map(t => { const c = teams.filter((tm: any) => tm.trackName === t.name).length; return c > 0 ? <span key={t.id} className="pill" style={{background:'rgba(124,58,237,0.1)',color:'#a78bfa',border:'1px solid rgba(124,58,237,0.2)'}}>{t.name}: {c}</span> : null; })}
               </div>
-              <button className="btn btn-danger btn-sm" onClick={async () => {
+              <button type="button" className="btn btn-danger btn-sm" onClick={async () => {
                 if (!confirm(`Remove all ${teams.length} teams? You can re-upload the CSV.`)) return;
                 for (const t of teams) { await run(`mutation D($id: String!) { deleteTeam(id: $id) { id } }`, { id: t.id }); }
                 show(`All teams removed`); reload();
@@ -618,10 +618,10 @@ export default function EventSetupPage() {
                     show(`"${t.name}" removed`); reload();
                   }}>Remove</span></td>
                 </tr>))}</tbody></table>
-                <button className="btn btn-sec btn-sm" style={{marginTop:6}} onClick={() => setExpanded(null)}>Collapse</button>
+                <button type="button" className="btn btn-sec btn-sm" style={{marginTop:6}} onClick={() => setExpanded(null)}>Collapse</button>
               </div>
             ) : (
-              <button className="btn btn-sec btn-sm" onClick={() => setExpanded('teams')}>View all {teams.length} teams</button>
+              <button type="button" className="btn btn-sec btn-sm" onClick={() => setExpanded('teams')}>View all {teams.length} teams</button>
             )}
           </>
         )}
@@ -643,8 +643,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1 && s2 && s3 && s4) toggleStep(5, s5); }}>
           <div style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).circle}>{(s5 && editingStep !== 5) ? '\u2713' : 5}</div>
           <span style={stepStyle(5, s5, s1 && s2 && s3 && s4, editingStep === 5).title}>{`Judges (${judges.length})`}</span>
-          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
-          {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
+          {editingStep === 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s5 && editingStep !== 5 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(5, s5) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -658,7 +658,7 @@ export default function EventSetupPage() {
                 return c > 0 ? <span key={tier} className="pill" style={{background:`${tierColors[tier]}18`,color:tierColors[tier],border:`1px solid ${tierColors[tier]}30`}}>{tier} {label}: {c}</span> : null;
               })}
               </div>
-              <button className="btn btn-danger btn-sm" onClick={async () => {
+              <button type="button" className="btn btn-danger btn-sm" onClick={async () => {
                 if (!confirm(`Remove all ${judges.length} judges? You can re-upload the CSV.`)) return;
                 for (const j of judges) { await run(`mutation D($id: String!) { deleteJudge(id: $id) { id } }`, { id: j.id }); }
                 show('All judges removed'); reload();
@@ -673,10 +673,10 @@ export default function EventSetupPage() {
                     await run(`mutation D($id: String!) { deleteJudge(id: $id) { id } }`, { id: j.id });
                     show(`"${j.name}" removed`); reload();
                   }}>Remove</span></td></tr>))}</tbody></table>
-                <button className="btn btn-sec btn-sm" style={{marginTop:6}} onClick={() => setExpanded(null)}>Collapse</button>
+                <button type="button" className="btn btn-sec btn-sm" style={{marginTop:6}} onClick={() => setExpanded(null)}>Collapse</button>
               </div>
             ) : (
-              <button className="btn btn-sec btn-sm" onClick={() => setExpanded('judges')}>View all {judges.length} judges</button>
+              <button type="button" className="btn btn-sec btn-sm" onClick={() => setExpanded('judges')}>View all {judges.length} judges</button>
             )}
           </>
         )}
@@ -758,8 +758,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1 && s2 && s3 && s4 && s5) toggleStep(6, s6); }}>
           <div style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).circle}>{(s6 && editingStep !== 6) ? '\u2713' : 6}</div>
           <span style={stepStyle(6, s6, s1 && s2 && s3 && s4 && s5, editingStep === 6).title}>{`Rooms (${rooms.length})`}</span>
-          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
-          {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
+          {editingStep === 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s6 && editingStep !== 6 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(6, s6) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -772,7 +772,7 @@ export default function EventSetupPage() {
                 Cap: {r.capacity || 25}
                 {r.hasVideoConferencing && <span style={{marginLeft:8,color:'#38bdf8'}}>VC</span>}
               </span>
-              <button className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Remove "${r.name}"?`)) return; await run(DELETE_ROOM, { id: r.id }); show(`"${r.name}" removed`); reload(); }}>Remove</button>
+              <button type="button" className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Remove "${r.name}"?`)) return; await run(DELETE_ROOM, { id: r.id }); show(`"${r.name}" removed`); reload(); }}>Remove</button>
             </div>
           </div>
         ))}
@@ -784,7 +784,7 @@ export default function EventSetupPage() {
               onChange={e => setNewRoom({...newRoom, hasVideoConferencing: e.target.checked})} />
             Video conferencing
           </label>
-          <button className="btn btn-pri btn-sm" onClick={async () => {
+          <button type="button" className="btn btn-pri btn-sm" onClick={async () => {
             if (!newRoom.name.trim()) return;
             await run(CREATE_ROOM, { input: { eventId, name: newRoom.name.trim(), capacity: newRoom.capacity, hasVideoConferencing: !!newRoom.hasVideoConferencing } });
             show(`"${newRoom.name}" added`); setNewRoom({ name: '', capacity: 25, hasVideoConferencing: false }); reload();
@@ -800,8 +800,8 @@ export default function EventSetupPage() {
             onClick={() => { if (s1 && s2 && s3 && s4 && s5 && s6) toggleStep(7, s7); }}>
           <div style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).circle}>{(s7 && editingStep !== 7) ? '\u2713' : 7}</div>
           <span style={stepStyle(7, s7, s1 && s2 && s3 && s4 && s5 && s6, editingStep === 7).title}>{`Time slots (${judgingSlots})`}</span>
-          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
-          {editingStep === 7 && <button className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
+          {s7 && s1 && s2 && s3 && s4 && s5 && s6 && editingStep !== 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(7)}>Edit</button>}
+          {editingStep === 7 && <button type="button" className="btn btn-sec btn-sm" onClick={() => setEditingStep(null)}>Done editing</button>}
           {s7 && editingStep !== 7 && <span style={{ fontSize: 11, color: '#10b981', padding: '2px 8px', borderRadius: 4, background: 'rgba(16,185,129,0.08)' }}>Done</span>}
           <span style={{ fontSize: 12, color: '#8ea3bc', marginLeft: 2 }}>{isStepOpen(7, s7) ? '\u25B4' : '\u25BE'}</span>
         </div>
@@ -816,7 +816,7 @@ export default function EventSetupPage() {
                   <span className="item-name">{fmt(day)}</span>
                   <div style={{display:'flex',gap:8,alignItems:'center'}}>
                     <span className="item-sub">{daySlots.length} slots</span>
-                    <button className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Clear slots for ${fmt(day)}?`)) return; await run(CLEAR_SLOTS, { eventId, date: day }); show('Slots cleared'); reload(); }}>Clear</button>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={async () => { if (!confirm(`Clear slots for ${fmt(day)}?`)) return; await run(CLEAR_SLOTS, { eventId, date: day }); show('Slots cleared'); reload(); }}>Clear</button>
                   </div>
                 </div>
               ) : null;
@@ -833,7 +833,7 @@ export default function EventSetupPage() {
                       case, and a grid of empty boxes should not take a third of
                       the section to say so. */}
                   <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <button
+                    <button type="button"
                       onClick={() => setRoomGridOpen(!roomGridOpen)}
                       className="btn btn-sec btn-sm"
                       style={{display:'flex',alignItems:'center',gap:6}}
@@ -919,7 +919,7 @@ export default function EventSetupPage() {
                     (n: number, e: any) => n + slotsPerHalfDay(day, e.session as 'AM' | 'PM'), 0);
                   const dayUsable = daySlots * Math.max(rooms.length, 1) - dayLost;
                   return (
-                    <button key={day} className={`btn btn-sm ${existing > 0 ? 'btn-success' : 'btn-pri'}`} style={{flex:1}} onClick={async () => {
+                    <button type="button" key={day} className={`btn btn-sm ${existing > 0 ? 'btn-success' : 'btn-pri'}`} style={{flex:1}} onClick={async () => {
                       if (existing > 0 && !confirm(`${fmt(day)} already has ${existing} slots. Regenerate?`)) return;
                       const d = await run(GEN_SLOTS, { input: { eventId, date: day, operatingStart: slotCfg.startTime, operatingEnd: slotCfg.endTime, sessionDurationMinutes: slotCfg.session, breakDurationMinutes: slotCfg.brk, lunchStart: slotCfg.lunchStart, lunchEnd: slotCfg.lunchEnd } });
                       if (d) {
@@ -945,7 +945,7 @@ export default function EventSetupPage() {
         <div className="ready-banner">
           <div style={{fontSize:18,fontWeight:500,color:'#10b981',marginBottom:6}}>Ready to schedule</div>
           <div style={{fontSize:14,color:'#94a3b8',marginBottom:12}}>{teams.length} teams, {judges.length} judges, {rooms.length} rooms, {judgingSlots} slots, {criteria.length} criteria</div>
-          <button className="btn btn-pri" onClick={() => window.location.href = '/dashboard/schedule'}>Go to Schedule</button>
+          <button type="button" className="btn btn-pri" onClick={() => window.location.href = '/dashboard/schedule'}>Go to Schedule</button>
         </div>
       )}
     
@@ -998,7 +998,7 @@ export default function EventSetupPage() {
               ))}
             </div>
             <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-              <button onClick={() => { setImportErrors([]); window.location.reload(); }} style={{padding:"8px 24px",borderRadius:8,fontSize:14,fontWeight:500,background:"#3b82f6",color:"#fff",border:"none",cursor:"pointer"}}>
+              <button type="button" onClick={() => { setImportErrors([]); window.location.reload(); }} style={{padding:"8px 24px",borderRadius:8,fontSize:14,fontWeight:500,background:"#3b82f6",color:"#fff",border:"none",cursor:"pointer"}}>
                 OK, got it
               </button>
             </div>

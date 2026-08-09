@@ -243,8 +243,8 @@ export class ExportController {
       const avg = totalValues.reduce((a, b) => a + b, 0) / totalValues.length;
       const variance = totalValues.reduce((s, v) => s + (v - avg) ** 2, 0) / totalValues.length;
       const stdDev = Math.sqrt(variance);
-      const lowest = totals.reduce((a, b) => a.total < b.total ? a : b);
-      const highest = totals.reduce((a, b) => a.total > b.total ? a : b);
+      const lowest = totals.reduce((a, b) => (a.total < b.total ? a : b), totals[0]);
+      const highest = totals.reduce((a, b) => (a.total > b.total ? a : b), totals[0]);
       const range = Math.max(...totalValues) - Math.min(...totalValues);
       const harshness = globalAvg > 0 ? ((avg - globalAvg) / globalAvg * 100).toFixed(1) : '';
 

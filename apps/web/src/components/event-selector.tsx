@@ -117,7 +117,7 @@ export default function EventSelector() {
         <div className={`${shell} border-red-500/20 bg-red-500/[0.04]`}>
           <p className="text-[10px] uppercase tracking-[0.15em] text-[#4a5568]">Event</p>
           <p className="mt-1 text-[12px] leading-snug text-red-300">{error}</p>
-          <button
+          <button type="button"
             onClick={() => load()}
             className="mt-1.5 text-[11px] font-medium text-[#a78bfa] hover:text-[#c4b5fd]"
           >
@@ -190,7 +190,7 @@ export default function EventSelector() {
           {events.map((e) => {
             const active = e.id === eventId;
             return (
-              <button
+              <button type="button"
                 key={e.id}
                 role="option"
                 aria-selected={active}

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@/lib/use-graphql';
 import CountryFlag from '@/components/country-flag';
 import PlatformChip from '@/components/platform-chip';
@@ -134,7 +134,7 @@ export default function ScheduleBuilderPage() {
   // Distinct values for the filter dropdowns, drawn from the data so a value
   // that does not exist is never offered.
   const distinct = (field: string) =>
-    [...new Set(allTeams.map((t: any) => t[field]).filter(Boolean))].sort();
+    [...new Set(allTeams.map((t: any) => t[field]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
 
   /**
    * Open a plain, printable view of the whole schedule.
@@ -317,7 +317,7 @@ export default function ScheduleBuilderPage() {
   };
 
   // Get unique dates
-  const dates = [...new Set(allSlots.map((s: any) => new Date(s.date).toISOString().split('T')[0]))].sort();
+  const dates = [...new Set(allSlots.map((s: any) => new Date(s.date).toISOString().split('T')[0]))].sort((a, b) => String(a).localeCompare(String(b)));
 
   // Add team to planner
   const addToPlanner = (team: any) => {
@@ -505,12 +505,12 @@ export default function ScheduleBuilderPage() {
             </div>
           )}
           {!isEventLocked && totalScheduled > 0 && (
-            <button onClick={resetSchedule} disabled={saving}
+            <button type="button" onClick={resetSchedule} disabled={saving}
               className="px-4 py-2 bg-dark-700 hover:bg-red-900/30 text-slate-400 hover:text-red-400 text-xs font-medium rounded-lg border border-dark-500 hover:border-red-500/30 transition-all disabled:opacity-50">
               ↺ Reset Schedule
             </button>
           )}
-          <button
+          <button type="button"
             onClick={() => setGuided(v => !v)}
             title={guided
               ? 'Anchors an MD and a PS to each room, and holds vendors back for you to invite'
@@ -529,19 +529,19 @@ export default function ScheduleBuilderPage() {
             </span>
             {guided ? 'Guided' : 'Auto'}
           </button>
-          <button onClick={autoGenerate} disabled={generating || unscheduledTeams.length === 0 || isEventLocked}
+          <button type="button" onClick={autoGenerate} disabled={generating || unscheduledTeams.length === 0 || isEventLocked}
             className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
             {generating ? '⟳ Generating...' : guided ? '⚡ Generate (guided)' : '⚡ Auto-Generate'}
           </button>
-          <button onClick={exportCsv} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
+          <button type="button" onClick={exportCsv} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
             className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
             Export CSV
           </button>
-          <button onClick={printSchedule} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
+          <button type="button" onClick={printSchedule} disabled={plannerCards.length === 0 && scheduledCards.length === 0}
             className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white text-xs font-medium rounded-lg border border-dark-500 transition-all disabled:opacity-50">
             Print
           </button>
-          <button onClick={confirmAll} disabled={saving || completePlannerCount === 0 || isEventLocked}
+          <button type="button" onClick={confirmAll} disabled={saving || completePlannerCount === 0 || isEventLocked}
             className="px-4 py-2 bg-accent hover:bg-accent/90 text-white text-xs font-medium rounded-lg transition-all disabled:opacity-50 shadow-lg shadow-accent/20">
             ✓ Confirm {completePlannerCount > 0 ? `(${completePlannerCount})` : 'All'}
           </button>
@@ -623,7 +623,7 @@ export default function ScheduleBuilderPage() {
               {' · '}
               {scheduledCards.filter((c: any) => matchesFilter(c)).length} placed
             </span>
-            <button onClick={() => { setFilterPlatform(''); setFilterCountry(''); setFilterTrack(''); setFilterUseCase(''); }}
+            <button type="button" onClick={() => { setFilterPlatform(''); setFilterCountry(''); setFilterTrack(''); setFilterUseCase(''); }}
               className="ml-auto text-[11px] text-amber-400 hover:text-amber-300">
               Clear
             </button>
@@ -727,7 +727,7 @@ export default function ScheduleBuilderPage() {
                         {card.techStack && <span className="text-[10px] bg-dark-600 text-slate-400 px-1.5 py-0.5 rounded">{card.techStack}</span>}
                       </div>
                     </div>
-                    <button onClick={() => removeFromPlanner(card.teamId)} className="text-slate-500 hover:text-error text-xs">✕</button>
+                    <button type="button" onClick={() => removeFromPlanner(card.teamId)} className="text-slate-500 hover:text-error text-xs">✕</button>
                   </div>
 
                   {/* Room, Date, Slot selectors */}
@@ -768,7 +768,7 @@ export default function ScheduleBuilderPage() {
                             conflict ? 'bg-error/20 text-error border border-error/30' : 'bg-dark-600 text-slate-200 border border-dark-500'
                           }`}>
                             {judge?.name || jId.slice(0, 8)}
-                            <button onClick={() => removeJudge(card.teamId, jId)} className="hover:text-error ml-0.5">✕</button>
+                            <button type="button" onClick={() => removeJudge(card.teamId, jId)} className="hover:text-error ml-0.5">✕</button>
                           </span>
                         );
                       })}
@@ -790,7 +790,7 @@ export default function ScheduleBuilderPage() {
                       {!card.slotId && <span className="text-[10px] text-warning">⚠ Time</span>}
                       {card.judgeIds.length < (event?.minJudgesPerTeam || 3) && <span className="text-[10px] text-warning">⚠ Judges</span>}
                     </div>
-                    <button onClick={() => confirmCard(card)} disabled={!complete || saving}
+                    <button type="button" onClick={() => confirmCard(card)} disabled={!complete || saving}
                       className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
                         complete
                           ? 'bg-success hover:bg-success/90 text-white shadow-lg shadow-success/20'

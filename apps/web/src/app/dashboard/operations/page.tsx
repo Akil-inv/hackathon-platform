@@ -169,8 +169,8 @@ export default function CommandCentrePage() {
   const getDate = (s: any) => s.scheduledStart ? new Date(s.scheduledStart).toLocaleDateString('en-SG', { weekday: 'short', day: 'numeric', month: 'short' }) : 'Unknown';
   const getTime = (s: any) => s.scheduledStart ? new Date(s.scheduledStart).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
 
-  const dates = [...new Set(sessions.map((s: any) => getDate(s)))].sort();
-  const roomNames = rooms.map((r: any) => r.name).sort();
+  const dates = [...new Set(sessions.map((s: any) => getDate(s)))].sort((a, b) => String(a).localeCompare(String(b)));
+  const roomNames = rooms.map((r: any) => r.name).sort((a, b) => String(a).localeCompare(String(b)));
 
   useEffect(() => { if (dates.length > 0 && !activeDate) setActiveDate(dates[0]); }, [dates]);
 
@@ -445,7 +445,7 @@ export default function CommandCentrePage() {
             )}
             <StatusBadge status={s.stage} />
             {canSwap && (
-              <button className={`swap-btn ${isSwapSource ? 'swap-btn-active' : ''}`}
+              <button type="button" className={`swap-btn ${isSwapSource ? 'swap-btn-active' : ''}`}
                 onClick={(e) => { e.stopPropagation(); handleCardClick(s.id); }}>
                 {isSwapSource ? 'Cancel' : 'Swap'}
               </button>
@@ -536,7 +536,7 @@ export default function CommandCentrePage() {
                 {replacements.filter(r => r.score > 0 && !r.hasConflict && !r.isBusyInSlot && r.isAvailable).slice(0, 6).map((r: any) => (
                   <div key={r.judgeId} className="exp-repl-row">
                     <span style={{ color: '#fff', fontSize: 14 }}>{r.judgeName} <span style={{ color: '#8ea3bc' }}>{r.judgeType}</span></span>
-                    <button className="exp-repl-add" onClick={(e) => { e.stopPropagation(); addJudge(s.id, r.judgeId); }}>Add</button>
+                    <button type="button" className="exp-repl-add" onClick={(e) => { e.stopPropagation(); addJudge(s.id, r.judgeId); }}>Add</button>
                   </div>
                 ))}
               </div>
@@ -560,20 +560,20 @@ export default function CommandCentrePage() {
         {/* Action buttons */}
         {s.stage === 'SCHEDULED' && (
           <div className="sess-btns">
-            <button className="btn-act btn-go" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'IN_PROGRESS'); }}>Start session</button>
-            <button className="btn-act" style={{background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.3)",color:"#a78bfa"}} onClick={(e) => { e.stopPropagation(); setMoveDialog({ sessionId: s.id, teamName: s.teamName, slots: getEmptySlots(s.id) }); }}>Move</button>
+            <button type="button" className="btn-act btn-go" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'IN_PROGRESS'); }}>Start session</button>
+            <button type="button" className="btn-act" style={{background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.3)",color:"#a78bfa"}} onClick={(e) => { e.stopPropagation(); setMoveDialog({ sessionId: s.id, teamName: s.teamName, slots: getEmptySlots(s.id) }); }}>Move</button>
           </div>
         )}
         {s.stage === 'IN_PROGRESS' && (
           <div className="sess-btns">
-            <button className="btn-act btn-done" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'COMPLETED'); }}>Complete</button>
-            <button className="btn-act btn-delay" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'DELAYED'); }}>Delay</button>
+            <button type="button" className="btn-act btn-done" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'COMPLETED'); }}>Complete</button>
+            <button type="button" className="btn-act btn-delay" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'DELAYED'); }}>Delay</button>
           </div>
         )}
         {s.stage === 'DELAYED' && (
           <div className="sess-btns">
-            <button className="btn-act btn-go" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'IN_PROGRESS'); }}>Resume</button>
-            <button className="btn-act btn-cancel" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'CANCELLED'); }}>Cancel</button>
+            <button type="button" className="btn-act btn-go" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'IN_PROGRESS'); }}>Resume</button>
+            <button type="button" className="btn-act btn-cancel" onClick={(e) => { e.stopPropagation(); updateStage(s.id, 'CANCELLED'); }}>Cancel</button>
           </div>
         )}
       </div>
@@ -624,7 +624,7 @@ export default function CommandCentrePage() {
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-semibold text-white">Message judges</span>
-              <button onClick={() => setMsgOpen(false)} className="text-slate-500 hover:text-white">✕</button>
+              <button type="button" onClick={() => setMsgOpen(false)} className="text-slate-500 hover:text-white">✕</button>
             </div>
 
             <div className="mb-3 max-h-44 overflow-y-auto rounded-lg border border-dark-600 p-2">
@@ -645,9 +645,9 @@ export default function CommandCentrePage() {
             </div>
 
             <div className="mb-3 flex gap-2">
-              <button onClick={() => setMsgTo(judges.map((j: any) => j.id))}
+              <button type="button" onClick={() => setMsgTo(judges.map((j: any) => j.id))}
                 className="text-[11px] text-accent hover:underline">Select all</button>
-              <button onClick={() => setMsgTo([])}
+              <button type="button" onClick={() => setMsgTo([])}
                 className="text-[11px] text-slate-500 hover:underline">Clear</button>
               <span className="ml-auto text-[11px] text-slate-500">
                 {msgTo.length} selected
@@ -664,7 +664,7 @@ export default function CommandCentrePage() {
               <span className="text-[11px] text-slate-500">
                 Replaces any note they have not yet dismissed.
               </span>
-              <button onClick={sendMessage}
+              <button type="button" onClick={sendMessage}
                 disabled={msgSending || !msgBody.trim() || msgTo.length === 0}
                 className="ml-auto rounded-lg bg-accent px-4 py-2 text-xs font-medium text-white disabled:opacity-40">
                 {msgSending ? 'Sending…' : 'Send'}
@@ -803,10 +803,10 @@ export default function CommandCentrePage() {
         </div>
         <div className="cc-actions">
           {message && <div className={`cc-msg ${msgType === 'ok' ? 'cc-msg-ok' : 'cc-msg-err'}`}>{message}</div>}
-          <button className="cc-btn" onClick={() => setMsgOpen(true)}>
+          <button type="button" className="cc-btn" onClick={() => setMsgOpen(true)}>
             Message judges{unread.length > 0 ? ` (${unread.length})` : ''}
           </button>
-          <button className="cc-btn" onClick={runHealthCheck}>Health check</button>
+          <button type="button" className="cc-btn" onClick={runHealthCheck}>Health check</button>
           <div style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontFamily: 'JetBrains Mono, monospace', fontSize: 16, fontWeight: 500, color: '#fff' }}>
             {now.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
           </div>
@@ -849,7 +849,7 @@ export default function CommandCentrePage() {
               <span style={{ fontSize: 15, color: '#a78bfa', fontWeight: 500 }}>
                 Swapping: {sessions.find((s: any) => s.id === swapSource)?.teamName} — click a green card to swap with
               </span>
-              <button onClick={cancelSwapSelection} style={{ fontSize: 14, color: '#8ea3bc', cursor: 'pointer', background: 'none', border: 'none', padding: '4px 12px' }}>Cancel</button>
+              <button type="button" onClick={cancelSwapSelection} style={{ fontSize: 14, color: '#8ea3bc', cursor: 'pointer', background: 'none', border: 'none', padding: '4px 12px' }}>Cancel</button>
             </div>
           ) : (
             <p className="drag-hint">Drag a card onto another to swap, or click "Swap" button then click a target.</p>
@@ -868,7 +868,7 @@ export default function CommandCentrePage() {
             {moveDialog.slots.length === 0 ? <p style={{color:"#f59e0b",fontSize:14}}>No empty slots available</p> : (
               <div style={{display:"flex",flexDirection:"column",gap:6}}>
                 {moveDialog.slots.map((slot: any, i: number) => (
-                  <button key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",cursor:"pointer",color:"#fff",fontSize:14}} onClick={() => executeMove(moveDialog.sessionId, slot.slotId, slot.roomId)}>
+                  <button type="button" key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderRadius:8,background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",cursor:"pointer",color:"#fff",fontSize:14}} onClick={() => executeMove(moveDialog.sessionId, slot.slotId, slot.roomId)}>
                     <span style={{fontWeight:500}}>{slot.time}</span>
                     <span style={{color:"#b4c2d4"}}>{slot.roomName}</span>
                     <span style={{color:"#8ea3bc",fontSize:13}}>{slot.date}</span>
@@ -876,7 +876,7 @@ export default function CommandCentrePage() {
                 ))}
               </div>
             )}
-            <button style={{marginTop:16,padding:"8px 16px",borderRadius:8,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"#fff",cursor:"pointer",fontSize:14}} onClick={() => setMoveDialog(null)}>Cancel</button>
+            <button type="button" style={{marginTop:16,padding:"8px 16px",borderRadius:8,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",color:"#fff",cursor:"pointer",fontSize:14}} onClick={() => setMoveDialog(null)}>Cancel</button>
           </div>
         </div>
       )}
@@ -911,7 +911,7 @@ export default function CommandCentrePage() {
               </div>
             </div>
             <div className="swap-cancel">
-              <button className="swap-cancel-btn" onClick={() => setSwapDialog(null)}>Cancel</button>
+              <button type="button" className="swap-cancel-btn" onClick={() => setSwapDialog(null)}>Cancel</button>
             </div>
           </div>
         </div>

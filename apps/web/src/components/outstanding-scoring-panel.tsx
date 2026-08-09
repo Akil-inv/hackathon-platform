@@ -89,7 +89,7 @@ export default function OutstandingScoringPanel({ eventId }: { eventId?: string 
 
   return (
     <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04]">
-      <button
+      <button type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-3 px-5 py-3 text-left"
       >
