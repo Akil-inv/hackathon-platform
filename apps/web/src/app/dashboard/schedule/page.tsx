@@ -369,14 +369,28 @@ export default function ScheduleBuilderPage() {
     setSaving(true);
     try {
       const client = createClient(token);
-      await client.mutation(SAVE_SESSIONS_MUTATION, {
+      const res = await client.mutation(SAVE_SESSIONS_MUTATION, {
         inputs: [{ eventId, teamId: card.teamId, roomId: card.roomId, timeSlotId: card.slotId, judgeIds: card.judgeIds }]
       }).toPromise();
+
+      // urql resolves with an `error` property rather than rejecting, so the
+      // catch below never fires on a GraphQL failure. Without this check a
+      // failed save removed the card from the planner and reported success.
+      const saved = res.data?.saveScheduleSessions;
+      if (res.error || !saved || saved.length !== 1) {
+        setMessage(
+          `${card.teamName} was not saved: ` +
+          (res.error?.message?.split('] ').pop() || 'the server returned nothing.')
+        );
+        setSaving(false);
+        return;
+      }
+
       removeFromPlanner(card.teamId);
       setScheduledCards(prev => [...prev, card]);
       setMessage(`${card.teamName} scheduled successfully`);
       setTimeout(() => setMessage(''), 3000);
-    } catch (e) { setMessage('Error saving session'); }
+    } catch (e: any) { setMessage('Error saving session: ' + (e?.message || e)); }
     setSaving(false);
   };
 
@@ -447,13 +461,51 @@ export default function ScheduleBuilderPage() {
     setSaving(true);
     try {
       const client = createClient(token);
-      await client.mutation(SAVE_SESSIONS_MUTATION, {
+      const res = await client.mutation(SAVE_SESSIONS_MUTATION, {
         inputs: complete.map(c => ({ eventId, teamId: c.teamId, roomId: c.roomId!, timeSlotId: c.slotId!, judgeIds: c.judgeIds }))
       }).toPromise();
+
+      // urql resolves with an `error` property rather than rejecting, so the
+      // catch below is unreachable on a GraphQL failure. This used to clear the
+      // planner and report success either way — and the reload a second later
+      // destroyed the only copy of a solve that takes over two minutes.
+      const saved = res.data?.saveScheduleSessions;
+      if (res.error || !saved) {
+        setMessage(
+          'Nothing was saved: ' +
+          (res.error?.message?.split('] ').pop() || 'the server returned nothing.') +
+          ' Your planner has been left untouched — try again.'
+        );
+        setSaving(false);
+        return;
+      }
+
+      const short = complete.length - saved.length;
+      const incomplete = plannerCards.length - complete.length;
+
+      if (short > 0) {
+        // The mutation returns session ids rather than team ids, so there is no
+        // reliable way to tell which of these cards landed. Clearing on a guess
+        // would lose the ones that did not, so nothing is cleared and the
+        // coordinator is told plainly. Rare, and recoverable.
+        setMessage(
+          `Only ${saved.length} of ${complete.length} sessions were saved. The ` +
+          'planner has been left as it is — reload to see what is stored before ' +
+          'trying again.'
+        );
+        setSaving(false);
+        return;
+      }
+
       setPlannerCards(prev => prev.filter(c => !isCardComplete(c)));
-      setMessage(`${complete.length} sessions saved successfully`);
-      setTimeout(() => window.location.reload(), 1000);
-    } catch (e) { setMessage('Error saving sessions'); }
+      setMessage(
+        `${saved.length} session(s) saved` +
+        (incomplete > 0
+          ? `. ${incomplete} incomplete card(s) were not submitted and remain in the planner`
+          : '')
+      );
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e: any) { setMessage('Error saving sessions: ' + (e?.message || e)); }
     setSaving(false);
   };
 

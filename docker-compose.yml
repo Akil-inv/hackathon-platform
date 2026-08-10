@@ -45,7 +45,10 @@ services:
     # restart: unless-stopped only acts when a process exits. A Node process that
     # is alive but not responding stays alive and broken, and nothing notices.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      # node, not wget: the image has neither wget nor curl, so the old
+      # probe failed on a missing binary while the API was perfectly
+      # healthy — and depends_on then refused to start anything behind it.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 20s
       timeout: 5s
       retries: 3

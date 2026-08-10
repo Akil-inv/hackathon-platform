@@ -19,6 +19,11 @@ export default function JudgePortalPage() {
   const [infoSessionId, setInfoSessionId] = useState<string | null>(null);
   const [activeScorecard, setActiveScorecard] = useState<any>(null);
   const [scores, setScores] = useState<Record<string, { score: number | null; comment: string }>>({});
+  // What the server held when this scorecard was loaded, and what we last
+  // successfully sent. Together these let a save carry only what changed and
+  // refuse to overwrite work done on another device (CONCUR-3, CONCUR-4).
+  const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
+  const [savedScores, setSavedScores] = useState<Record<string, { score: number | null; comment: string }>>({});
   const [strengths, setStrengths] = useState('');
   const [improvements, setImprovements] = useState('');
   const [recommendation, setRecommendation] = useState('');
@@ -80,6 +85,15 @@ export default function JudgePortalPage() {
       }
     } catch { /* nothing to recover */ }
 
+    setServerUpdatedAt(sc.updatedAt ?? null);
+    // The baseline is what the server holds, not what was restored from the
+    // tab's cache — restored values are unsaved by definition and must be sent.
+    const serverMap: Record<string, { score: number | null; comment: string }> = {};
+    sc.criterionScores?.forEach((cs: any) => {
+      serverMap[cs.criterionId] = { score: cs.score, comment: cs.comment || '' };
+    });
+    setSavedScores(serverMap);
+
     setRecovered(restored);
     setDirty(false);
     setLastSaved(null);
@@ -122,13 +136,43 @@ export default function JudgePortalPage() {
         saveOrSubmit(false, true);
       }
     };
+
+    // Coming back to a device after working on another one. With nothing
+    // unsaved the server's copy is simply better, so take it. With unsaved work
+    // the judge is told rather than having either version silently win
+    // (CONCUR-1, CONCUR-2).
+    const onShow = async () => {
+      if (document.visibilityState !== 'visible' || !activeScorecard) return;
+      try {
+        const res = await fetch(
+          `${apiUrl}/api/judge-portal/${token}/scorecards?event=${eventId}`,
+        );
+        if (!res.ok) return;
+        const list = await res.json();
+        const mine = list.find((c: any) => c.id === activeScorecard.id);
+        if (!mine) return;
+        if (mine.updatedAt === serverUpdatedAt) return;
+
+        if (dirty) {
+          setMessage(
+            'This scorecard was also updated on another device. Check your ' +
+            'entries before saving — saving now will be refused until you reload.',
+          );
+          return;
+        }
+        openScorecard(mine);
+        setMessage('Refreshed from your other device.');
+      } catch { /* offline; the existing save paths still apply */ }
+    };
     document.addEventListener('visibilitychange', onHide);
+    document.addEventListener('visibilitychange', onShow);
     window.addEventListener('pagehide', onHide);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
+      document.removeEventListener('visibilitychange', onShow);
       window.removeEventListener('pagehide', onHide);
     };
-  }, [activeScorecard, dirty, scores, strengths, improvements, recommendation]);
+  }, [activeScorecard, dirty, scores, strengths, improvements, recommendation, serverUpdatedAt]);
 
   // A last line of defence for a deliberate close with work outstanding.
   useEffect(() => {
@@ -144,15 +188,28 @@ export default function JudgePortalPage() {
     if (auto && !dirty) return;
     setSaving(true);
     try {
+      // Only what changed since the last successful save (CONCUR-3). A tab
+      // left open on another device then has nothing to send, so it cannot
+      // quietly overwrite work done elsewhere. A submit sends everything, so
+      // the server validates against a complete picture.
+      const changed = Object.entries(scores).filter(([criterionId, s]) => {
+        if (submit) return s.score !== null;
+        const was = savedScores[criterionId];
+        return !was || was.score !== s.score || (was.comment || '') !== (s.comment || '');
+      });
+
+      if (auto && changed.length === 0 && !dirty) { setSaving(false); return; }
+
       const body = {
         scorecardId: activeScorecard.id,
-        scores: Object.entries(scores)
-          .filter(([_, s]) => s.score !== null)
-          .map(([criterionId, s]) => ({ criterionId, score: s.score!, comment: s.comment || undefined })),
+        scores: changed.map(([criterionId, s]) => ({
+          criterionId, score: s.score, comment: s.comment || undefined,
+        })),
         overallStrengths: strengths || undefined,
         areasForImprovement: improvements || undefined,
         recommendation: recommendation || undefined,
         submit,
+        expectedUpdatedAt: serverUpdatedAt || undefined,
       };
       const res = await fetch(`${apiUrl}/api/judge-portal/${token}/score?event=${eventId}`, {
         method: 'POST',
@@ -160,6 +217,33 @@ export default function JudgePortalPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
+
+      // 409: this scorecard changed on another device. Never merge silently —
+      // reload and let the judge see what is actually stored (CONCUR-2).
+      if (res.status === 409) {
+        setMessage(
+          'This scorecard was updated on another device. Reloading — your ' +
+          'unsaved changes are still on screen, check them before saving again.',
+        );
+        const fresh = await fetch(
+          `${apiUrl}/api/judge-portal/${token}/scorecards?event=${eventId}`,
+        );
+        if (fresh.ok) {
+          const list = await fresh.json();
+          const mine = list.find((c: any) => c.id === activeScorecard.id);
+          if (mine) {
+            setServerUpdatedAt(mine.updatedAt ?? null);
+            const serverMap: Record<string, { score: number | null; comment: string }> = {};
+            mine.criterionScores?.forEach((cs: any) => {
+              serverMap[cs.criterionId] = { score: cs.score, comment: cs.comment || '' };
+            });
+            setSavedScores(serverMap);
+          }
+        }
+        setSaving(false);
+        return;
+      }
+
       if (data.error || data.message?.startsWith('Error') || !res.ok) {
         // An autosave that fails must not be silent — the judge would carry on
         // believing their work was safe.
@@ -168,6 +252,14 @@ export default function JudgePortalPage() {
       } else {
         setDirty(false);
         setLastSaved(new Date());
+        if (data.updatedAt) setServerUpdatedAt(data.updatedAt);
+        setSavedScores({ ...scores });
+        if (data.ignoredCriterionIds?.length) {
+          setMessage(
+            `${data.ignoredCriterionIds.length} entry(ies) were not saved because ` +
+            'this page is behind the current rubric. Reload before continuing.',
+          );
+        }
         try { sessionStorage.removeItem(draftKey(activeScorecard.id)); } catch {}
         setMessage(submit ? 'Scorecard submitted!' : auto ? '' : 'Draft saved');
         if (submit) {
@@ -500,11 +592,19 @@ export default function JudgePortalPage() {
                 'Anything you have entered will be discarded, and this team will ' +
                 'be scored by the other two judges.'
               )) return;
-              await fetch(`${apiUrl}/api/judge-portal/${token}/break?event=${eventId}`, {
+              const res = await fetch(`${apiUrl}/api/judge-portal/${token}/break?event=${eventId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sessionId, onBreak: on }),
               });
+              if (!res.ok) {
+                // Refusals here are meaningful — the other IG judge has already
+                // stepped out, or this scorecard is already submitted. Showing
+                // nothing would leave the judge believing they had stepped out.
+                const err = await res.json().catch(() => ({}));
+                setMessage(err.message || 'Could not update your break status.');
+                return;
+              }
               fetchData();
             } : undefined}
 
