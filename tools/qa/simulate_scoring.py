@@ -184,12 +184,17 @@ def build_expectations(criteria: list[dict], teams: list[dict]) -> list[Expected
             counting.append(scores_for(sc, criteria, sc.third[0]))
             judges = 3
 
+        # ROUND-1: each criterion mean is rounded to 2dp, then the rounded
+        # means are summed, then rounded again. Summing exact means and
+        # rounding once gives a different answer — 0.01 on a 9-criterion
+        # rubric, 0.02 on an 11-criterion one — and the difference looks like
+        # a defect when it is only a different arithmetic order.
         total = Decimal(0)
         best = Decimal(0)
         per_crit = []
         for c in criteria:
             vals = [Decimal(s[c["id"]]) for s in counting]
-            mean = sum(vals) / Decimal(len(vals))
+            mean = (sum(vals) / Decimal(len(vals))).quantize(Decimal("0.01"))
             total += mean
             best = max(best, mean)
             per_crit.append((c["name"], mean, len(vals)))
@@ -395,7 +400,12 @@ def verify(conn, event_id: str, exp: list[Expected]) -> int:
     resub = next((e for e in present if e.key == "RESUB"), None)
     if resub:
         got = Decimal(str(stored[resub.team_id]["aggregated_score"]))
-        if abs(got - resub.score) > Decimal("0.01"):
+        # Only a score *below* expectation indicates exclusion: RESUB's third
+        # judge scores higher than the other two, so dropping that card lowers
+        # the average. A score above expectation is arithmetic, not exclusion —
+        # claiming otherwise from a difference in either direction is how a
+        # diagnostic ends up confidently wrong.
+        if got < resub.score - Decimal("0.05"):
             fails.append(
                 f"RESUBMITTED scorecards appear to be excluded from rankings "
                 f"(expected {resub.score} with it counted, got {got}). A judge who "
