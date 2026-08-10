@@ -3,6 +3,7 @@ import { JudgePortalService } from './judge-portal.service';
 import { Public } from '../auth/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ScoringCoreService } from '../scorecards/scoring-core.service';
 
 @Controller('api/judge-portal')
 export class JudgePortalController {
@@ -10,6 +11,7 @@ export class JudgePortalController {
     private service: JudgePortalService,
     private prisma: PrismaService,
     private audit: AuditService,
+    private core: ScoringCoreService,
   ) {}
 
   @Public()
@@ -237,6 +239,20 @@ export class JudgePortalController {
       });
     }
 
+    // AUDIT-4. A break changes who scores a team, so it belongs in the record
+    // alongside the scores themselves.
+    await this.core.recordBreak({
+      eventId,
+      sessionId: body.sessionId,
+      judgeId: judge.id,
+      judgeName: judge.name,
+      onBreak: body.onBreak,
+      draftDiscarded: Boolean(
+        body.onBreak && scorecard && scorecard.status === 'DRAFT',
+      ),
+      actorId: judge.id,
+    });
+
     return { success: true, onBreak: body.onBreak };
   }
 
@@ -266,7 +282,7 @@ export class JudgePortalController {
     @Query('event') eventId: string,
     @Body() body: {
       scorecardId: string;
-      scores: Array<{ criterionId: string; score: number; comment?: string }>;
+      scores: Array<{ criterionId: string; score: number | null; comment?: string }>;
       overallStrengths?: string;
       areasForImprovement?: string;
       recommendation?: string;
@@ -275,99 +291,34 @@ export class JudgePortalController {
   ) {
     const judge = await this.service.getJudgeByToken(token, eventId);
 
-    // Verify this scorecard belongs to this judge
-    const scorecard = await this.prisma.scorecard.findUnique({
-      where: { id: body.scorecardId },
-      include: { session: true },
+    // Scoring itself lives in ScoringCoreService, shared with the GraphQL path.
+    // This endpoint establishes who the judge is and hands over; it does not
+    // reimplement validation, totalling, status transitions or audit. The two
+    // implementations had drifted badly and the one judges used was the weaker.
+    const result = await this.core.writeScores({
+      scorecardId: body.scorecardId,
+      eventId,
+      scores: body.scores ?? [],
+      overallStrengths: body.overallStrengths,
+      areasForImprovement: body.areasForImprovement,
+      recommendation: body.recommendation,
+      submit: body.submit === true,
+      actorId: judge.id,
+      expectedJudgeId: judge.id,
+      // conflictConfirmed deliberately not sent: no confirmation is presented
+      // to a judge in this portal, and a column that always reads true is worse
+      // than an empty one in a dispute.
     });
-    if (!scorecard) throw new NotFoundException('Scorecard not found');
-    if (scorecard.judgeId !== judge.id) throw new ForbiddenException('This scorecard does not belong to you');
 
-    // Check event not closed
-    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
-    if (event?.status === 'COMPLETED' || event?.status === 'ARCHIVED') {
-      throw new BadRequestException('Event is closed. No more scoring allowed.');
-    }
-
-    // Check session stage
-    const scoreableStages = ['SCORING', 'COMPLETED', 'QA', 'IN_PROGRESS'];
-    if (!scoreableStages.includes(scorecard.session?.stage || '')) {
-      throw new BadRequestException(`Scoring not enabled. Session is ${scorecard.session?.stage}. Wait for organizer to start the session.`);
-    }
-
-    // Check scorecard is editable
-    if (['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(scorecard.status)) {
-      throw new BadRequestException('Scorecard already submitted. Ask organizer to reopen if changes needed.');
-    }
-
-    // Initialize criterion scores if needed — leaves only. A category's points
-    // are already represented by its rows.
-    const template = await this.prisma.scoringTemplate.findFirst({ where: { eventId, status: 'ACTIVE' } });
-    const categoryIds = new Set<string>();
-    if (template) {
-      const criteria = await this.prisma.scoringCriterion.findMany({ where: { templateId: template.id } });
-      for (const c of criteria) {
-        if ((c as any).parentId) categoryIds.add((c as any).parentId);
-      }
-      for (const c of criteria) {
-        if (categoryIds.has(c.id)) continue;
-        await this.prisma.criterionScore.upsert({
-          where: { scorecardId_criterionId: { scorecardId: scorecard.id, criterionId: c.id } },
-          create: { scorecardId: scorecard.id, criterionId: c.id },
-          update: {},
-        });
-      }
-    }
-
-    // Save scores, dropping anything aimed at a category. A page loaded before
-    // the rubric became two-level would otherwise put those rows back.
-    const incoming = body.scores.filter(s => !categoryIds.has(s.criterionId));
-
-    for (const s of incoming) {
-      await this.prisma.criterionScore.upsert({
-        where: { scorecardId_criterionId: { scorecardId: scorecard.id, criterionId: s.criterionId } },
-        create: { scorecardId: scorecard.id, criterionId: s.criterionId, score: s.score, comment: s.comment },
-        update: { score: s.score, comment: s.comment },
-      });
-    }
-
-    const totalScore = incoming.reduce((sum, s) => sum + s.score, 0);
-
-    if (body.submit) {
-      // Validate all criteria scored
-      const allScores = await this.prisma.criterionScore.findMany({
-        where: { scorecardId: scorecard.id },
-        include: { criterion: true },
-      });
-      for (const cs of allScores) {
-        if (categoryIds.has(cs.criterionId)) continue;
-        if (cs.score === null) throw new BadRequestException(`Score for "${cs.criterion.name}" is required`);
-        if (cs.criterion.requiresComment && !cs.comment?.trim()) throw new BadRequestException(`Comment for "${cs.criterion.name}" is required`);
-      }
-
-      await this.prisma.scorecard.update({
-        where: { id: scorecard.id },
-        data: {
-          status: scorecard.status === 'REOPENED' ? 'RESUBMITTED' : 'SUBMITTED',
-          totalScore, conflictConfirmed: true, submittedAt: new Date(),
-          overallStrengths: body.overallStrengths,
-          areasForImprovement: body.areasForImprovement,
-          recommendation: body.recommendation,
-        },
-      });
-      return { success: true, message: 'Scorecard submitted', totalScore };
-    } else {
-      await this.prisma.scorecard.update({
-        where: { id: scorecard.id },
-        data: {
-          status: scorecard.status === 'NOT_STARTED' ? 'DRAFT' : scorecard.status,
-          totalScore,
-          overallStrengths: body.overallStrengths,
-          areasForImprovement: body.areasForImprovement,
-          recommendation: body.recommendation,
-        },
-      });
-      return { success: true, message: 'Draft saved', totalScore };
-    }
+    return {
+      success: true,
+      message: result.submitted ? 'Scorecard submitted' : 'Draft saved',
+      totalScore: result.totalScore,
+      status: result.status,
+      // Criterion ids accepted but not stored because they name a category —
+      // a page a version behind the rubric. The judge is told rather than
+      // being told everything saved when part of it did not.
+      ignoredCriterionIds: result.ignoredCriterionIds,
+    };
   }
 }

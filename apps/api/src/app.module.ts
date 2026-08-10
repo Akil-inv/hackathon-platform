@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { APP_GUARD } from '@nestjs/core';
@@ -29,6 +29,7 @@ import { HealthResolver } from './health.resolver';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { EventScopeGuard } from './auth/event-scope.guard';
+import { GqlThrottlerGuard } from './common/gql-throttler.guard';
 
 @Module({
   controllers: [HealthController],
@@ -52,7 +53,9 @@ import { EventScopeGuard } from './auth/event-scope.guard';
       playground: process.env.NODE_ENV !== 'production',
       introspection: process.env.NODE_ENV !== 'production',
       subscriptions: { 'graphql-ws': true },
-      context: ({ req }: { req: Request }) => ({ req }),
+      // `res` as well as `req`: the throttler writes its rate-limit headers
+      // to the response, and GqlThrottlerGuard reads both from here.
+      context: ({ req, res }: { req: Request; res: Response }) => ({ req, res }),
     }),
     PrismaModule,
     AuthModule,
@@ -76,7 +79,10 @@ import { EventScopeGuard } from './auth/event-scope.guard';
   ],
   providers: [
     HealthResolver,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // GqlThrottlerGuard, not ThrottlerGuard: the stock guard resolves the
+    // request through switchToHttp(), which is undefined under GraphQL, and
+    // throws on req.ip before any other guard runs.
+    { provide: APP_GUARD, useClass: GqlThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     // After RolesGuard: role first, then whether this user may touch this

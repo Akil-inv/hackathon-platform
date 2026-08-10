@@ -638,6 +638,7 @@ model RankingResult {
   rankPosition      Int           @map("rank_position")
   aggregatedScore   Decimal       @map("aggregated_score") @db.Decimal(6, 2)
   judgeCount        Int           @map("judge_count")
+  tied              Boolean  @default(false)
   aggregationMethod String        @default("criterion_average_sum") @map("aggregation_method")
   status            RankingStatus @default(CALCULATING)
   approvedBy        String?       @map("approved_by") @db.Uuid

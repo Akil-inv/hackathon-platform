@@ -40,11 +40,11 @@ export class ExportController {
       const judgeFields: string[] = [];
       for (let i = 0; i < 5; i++) {
         const j = s.judges[i]?.judge;
-        judgeFields.push(j ? `"${j.name}"` : '');
+        judgeFields.push(j ? this.csvCell(j.name) : '');
         judgeFields.push(j?.judgeType || '');
         judgeFields.push(j?.judgeTier || '');
       }
-      return [date, start, end, `"${s.room?.name || ''}"`, `"${s.team.name}"`, `"${s.team.projectName}"`, `"${s.team.track?.name || ''}"`, `"${s.team.organisation || ''}"`, ...judgeFields, s.stage].join(',');
+      return [date, start, end, this.csvCell(s.room?.name || ''), this.csvCell(s.team.name), this.csvCell(s.team.projectName), this.csvCell(s.team.track?.name || ''), this.csvCell(s.team.organisation || ''), ...judgeFields, s.stage].join(',');
     });
 
     this.sendCsv(res, event.name, 'schedule', header, rows);
@@ -78,11 +78,11 @@ export class ExportController {
       for (const cs of sc.criterionScores) {
         const pct = cs.criterion?.maxScore && cs.score !== null ? ((cs.score / cs.criterion.maxScore) * 100).toFixed(1) : '';
         rows.push([
-          `"${sc.team.name}"`, `"${sc.team.projectName}"`, `"${sc.team.track?.name || ''}"`, `"${sc.team.organisation || ''}"`,
-          `"${sc.judge.name}"`, `"${sc.judge.email}"`, sc.judge.judgeType, sc.judge.judgeTier, `"${sc.judge.organisation || ''}"`,
-          `"${cs.criterion?.name || ''}"`, cs.criterion?.maxScore?.toString() || '', cs.score !== null ? cs.score.toString() : '', pct,
-          `"${(cs.comment || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-          sc.status, `"${sc.session?.room?.name || ''}"`, date, time, submitted,
+          this.csvCell(sc.team.name), this.csvCell(sc.team.projectName), this.csvCell(sc.team.track?.name || ''), this.csvCell(sc.team.organisation || ''),
+          this.csvCell(sc.judge.name), this.csvCell(sc.judge.email), sc.judge.judgeType, sc.judge.judgeTier, this.csvCell(sc.judge.organisation || ''),
+          this.csvCell(cs.criterion?.name || ''), cs.criterion?.maxScore?.toString() || '', cs.score !== null ? cs.score.toString() : '', pct,
+          this.csvCell(cs.comment),
+          sc.status, this.csvCell(sc.session?.room?.name || ''), date, time, submitted,
         ].join(','));
       }
     }
@@ -121,18 +121,18 @@ export class ExportController {
         const cs = sc.criterionScores.find(s => s.criterionId === c.id);
         return [
           cs?.score !== null && cs?.score !== undefined ? cs.score.toString() : '',
-          `"${(cs?.comment || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+          this.csvCell(cs?.comment),
         ];
       });
       const total = sc.criterionScores.reduce((sum: number, cs: any) => sum + (cs.score || 0), 0);
       const pct = maxTotal > 0 ? ((total / maxTotal) * 100).toFixed(1) : '';
       return [
-        `"${sc.team.name}"`, `"${sc.team.projectName}"`, `"${sc.team.track?.name || ''}"`, `"${sc.team.organisation || ''}"`,
-        `"${sc.judge.name}"`, sc.judge.judgeType, sc.judge.judgeTier, `"${sc.judge.organisation || ''}"`,
+        this.csvCell(sc.team.name), this.csvCell(sc.team.projectName), this.csvCell(sc.team.track?.name || ''), this.csvCell(sc.team.organisation || ''),
+        this.csvCell(sc.judge.name), sc.judge.judgeType, sc.judge.judgeTier, this.csvCell(sc.judge.organisation || ''),
         ...critFields, total.toString(), pct,
-        `"${(sc.overallStrengths || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-        `"${(sc.areasForImprovement || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
-        `"${(sc.recommendation || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+        this.csvCell(sc.overallStrengths),
+        this.csvCell(sc.areasForImprovement),
+        this.csvCell(sc.recommendation),
         sc.status, sc.submittedAt ? new Date(sc.submittedAt).toISOString() : '',
       ].join(',');
     });
@@ -195,7 +195,7 @@ export class ExportController {
       const completion = expectedJudges > 0 ? ((judgeCount / expectedJudges) * 100).toFixed(0) : '';
 
       return [
-        `"${team.name}"`, `"${team.projectName}"`, `"${team.track?.name || ''}"`, `"${team.organisation || ''}"`,
+        this.csvCell(team.name), this.csvCell(team.projectName), this.csvCell(team.track?.name || ''), this.csvCell(team.organisation || ''),
         judgeCount.toString(), expectedJudges.toString(), ...critFields,
         totalAvg, totalMin, totalMax, totalStdDev, completion,
       ].join(',');
@@ -235,7 +235,7 @@ export class ExportController {
     const rows = judges.map(judge => {
       const cards = scorecards.filter(sc => sc.judgeId === judge.id);
       if (cards.length === 0) {
-        return [`"${judge.name}"`, `"${judge.email}"`, judge.judgeType, judge.judgeTier, `"${judge.organisation || ''}"`, '0', judge.maxSessions.toString(), '', '', '', '', ...criteria.flatMap(() => ['', '']), '', ''].join(',');
+        return [this.csvCell(judge.name), this.csvCell(judge.email), judge.judgeType, judge.judgeTier, this.csvCell(judge.organisation || ''), '0', judge.maxSessions.toString(), '', '', '', '', ...criteria.flatMap(() => ['', '']), '', ''].join(',');
       }
 
       const totals = cards.map(sc => ({ team: sc.team.name, total: sc.criterionScores.reduce((s: number, cs: any) => s + (cs.score || 0), 0) }));
@@ -257,7 +257,7 @@ export class ExportController {
       });
 
       return [
-        `"${judge.name}"`, `"${judge.email}"`, judge.judgeType, judge.judgeTier, `"${judge.organisation || ''}"`,
+        this.csvCell(judge.name), this.csvCell(judge.email), judge.judgeType, judge.judgeTier, this.csvCell(judge.organisation || ''),
         cards.length.toString(), judge.maxSessions.toString(), avg.toFixed(2), stdDev.toFixed(2),
         `"${lowest.team} (${lowest.total})"`, `"${highest.team} (${highest.total})"`,
         ...critFields, range.toString(), harshness,
@@ -309,8 +309,8 @@ export class ExportController {
       const pct = maxTotal > 0 ? ((Number(r.aggregatedScore) / maxTotal) * 100).toFixed(1) : '';
 
       return [
-        r.rankPosition.toString(), `"${r.team.name}"`, `"${r.team.projectName}"`, `"${r.team.track?.name || ''}"`, `"${r.team.organisation || ''}"`,
-        `"${judgeNames}"`,
+        r.rankPosition.toString(), this.csvCell(r.team.name), this.csvCell(r.team.projectName), this.csvCell(r.team.track?.name || ''), this.csvCell(r.team.organisation || ''),
+        this.csvCell(judgeNames),
         ...critAvgs, Number(r.aggregatedScore).toFixed(1), maxTotal.toString(), pct, r.judgeCount.toString(), r.status,
         '"Indicative - final calibration done offline"',
       ].join(',');
@@ -321,6 +321,29 @@ export class ExportController {
   }
 
   // ─── Helper ───
+
+  /**
+   * One CSV cell.
+   *
+   * Three things had to be handled and only one was:
+   *
+   *  - Embedded quotes. Only the comment field doubled them, so a team or judge
+   *    name containing a quote broke the row structure and shifted every column
+   *    after it.
+   *  - Newlines, for the same reason.
+   *  - A leading =, +, - or @. Excel treats those cells as formulas, and this
+   *    export is opened in Excel by definition. A comment of "-2 for scope
+   *    creep" is a plausible thing for a judge to write and an unpleasant thing
+   *    for a spreadsheet to evaluate. Prefixing a tab neutralises it while
+   *    leaving the text readable.
+   */
+  private csvCell(value: unknown): string {
+    if (value === null || value === undefined) return '""';
+    let v = String(value).replace(/\r?\n/g, ' ');
+    if (/^[=+\-@\t\r]/.test(v)) v = `\t${v}`;
+    return '"' + v.replace(/"/g, '""') + '"';
+  }
+
   private sendCsv(res: Response, eventName: string, type: string, header: string[], rows: string[]) {
     const csv = [header.join(','), ...rows].join('\n');
     const safeName = eventName.replace(/[^a-zA-Z0-9]/g, '_');

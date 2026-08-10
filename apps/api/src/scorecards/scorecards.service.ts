@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction, ScorecardStatus } from '@prisma/client';
 import { SaveScorecardInput, SubmitScorecardInput } from './scorecards.types';
 import { RankingsService } from '../rankings/rankings.service';
+import { ScoringCoreService } from './scoring-core.service';
 
 @Injectable()
 export class ScorecardsService {
@@ -13,6 +14,7 @@ export class ScorecardsService {
     private prisma: PrismaService,
     private audit: AuditService,
     private rankings: RankingsService,
+    private core: ScoringCoreService,
   ) {}
 
   /**
@@ -150,20 +152,13 @@ export class ScorecardsService {
     });
   }
 
+  /**
+   * Kept for callers that seed a scorecard outside a save. The leaf-versus-
+   * category rule lives in ScoringCoreService so there is exactly one of it.
+   */
   async initializeCriterionScores(scorecardId: string, templateId: string) {
-    const all = await this.prisma.scoringCriterion.findMany({
-      where: { templateId },
-      orderBy: { displayOrder: 'asc' },
-    });
-
-    // Only leaves are scored. A criterion with children is a category — a
-    // grouping for display and roll-up, not a question a judge answers.
-    // Scoring both would ask for the same points twice and make 100
-    // unreachable.
-    const parentIds = new Set(all.map((c: any) => c.parentId).filter(Boolean));
-    const criteria = all.filter((c: any) => !parentIds.has(c.id));
-
-    for (const c of criteria) {
+    const { leaves } = await this.core.getCriteria(templateId);
+    for (const c of leaves) {
       await this.prisma.criterionScore.upsert({
         where: { scorecardId_criterionId: { scorecardId, criterionId: c.id } },
         create: { scorecardId, criterionId: c.id },
@@ -172,122 +167,57 @@ export class ScorecardsService {
     }
   }
 
+  /**
+   * Scoring lives in ScoringCoreService — see the note at the top of that file
+   * for why. These two methods exist only to adapt the GraphQL input types and
+   * return the enriched shape the resolver expects.
+   */
   async saveDraft(input: SaveScorecardInput, userId: string) {
     const sc = await this.prisma.scorecard.findUnique({
       where: { id: input.scorecardId },
-      include: { session: true },
+      select: { eventId: true },
     });
     if (!sc) throw new NotFoundException('Scorecard not found');
 
-    // Security check
-    await this.assertScoringAllowed(sc);
-
-    if (['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(sc.status)) {
-      throw new BadRequestException('Cannot edit a submitted or locked scorecard');
-    }
-
-    const template = await this.prisma.scoringTemplate.findFirst({
-      where: { eventId: sc.eventId, status: 'ACTIVE' },
-    });
-    if (template) await this.initializeCriterionScores(sc.id, template.id);
-
-    // Categories are groupings, not questions. A client that renders one as a
-    // slider — a stale page, or a replayed request — would otherwise write a
-    // score against it and push the total past the maximum, because the
-    // category's points are already represented by its rows.
-    //
-    // Dropped silently rather than rejected: a judge mid-session should not
-    // hit an error because their page is a version behind.
-    const allCriteria = await this.prisma.scoringCriterion.findMany({
-      where: { templateId: template?.id ?? '' },
-      select: { id: true, parentId: true },
-    });
-    const categoryIds = new Set(
-      allCriteria.map((c: any) => c.parentId).filter(Boolean) as string[],
-    );
-
-    const scores = input.scores.filter(s => !categoryIds.has(s.criterionId));
-
-    for (const s of scores) {
-      await this.prisma.criterionScore.upsert({
-        where: { scorecardId_criterionId: { scorecardId: sc.id, criterionId: s.criterionId } },
-        create: { scorecardId: sc.id, criterionId: s.criterionId, score: s.score, comment: s.comment },
-        update: { score: s.score, comment: s.comment },
-      });
-    }
-
-    const totalScore = scores.reduce((sum, s) => sum + s.score, 0);
-    const newStatus = sc.status === 'NOT_STARTED' ? 'DRAFT' : sc.status === 'REOPENED' ? 'REOPENED' : 'DRAFT';
-
-    const updated = await this.prisma.scorecard.update({
-      where: { id: sc.id },
-      data: {
-        status: newStatus as ScorecardStatus,
-        totalScore,
-        overallStrengths: input.overallStrengths,
-        areasForImprovement: input.areasForImprovement,
-        recommendation: input.recommendation,
-      },
-      include: {
-        judge: true, team: true,
-        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
-      },
+    await this.core.writeScores({
+      scorecardId: input.scorecardId,
+      eventId: sc.eventId,
+      scores: input.scores,
+      overallStrengths: input.overallStrengths,
+      areasForImprovement: input.areasForImprovement,
+      recommendation: input.recommendation,
+      submit: false,
+      actorId: userId,
     });
 
-    return this.enrichScorecard(updated);
+    return this.findOne(input.scorecardId);
   }
 
   async submit(input: SubmitScorecardInput, userId: string) {
     const sc = await this.prisma.scorecard.findUnique({
       where: { id: input.scorecardId },
-      include: { criterionScores: { include: { criterion: true } }, session: true },
+      select: { eventId: true },
     });
     if (!sc) throw new NotFoundException('Scorecard not found');
 
-    // Security check
-    await this.assertScoringAllowed(sc);
-
-    if (!['DRAFT', 'REOPENED'].includes(sc.status)) {
-      throw new BadRequestException(`Cannot submit a scorecard with status ${sc.status}`);
-    }
-
-    for (const cs of sc.criterionScores) {
-      if (cs.score === null || cs.score === undefined) {
-        throw new BadRequestException(`Score for "${cs.criterion.name}" is required`);
-      }
-      if (cs.score > cs.criterion.maxScore) {
-        throw new BadRequestException(`Score for "${cs.criterion.name}" exceeds maximum of ${cs.criterion.maxScore}`);
-      }
-      if (cs.criterion.requiresComment && !cs.comment?.trim()) {
-        throw new BadRequestException(`Comment for "${cs.criterion.name}" is required`);
-      }
-    }
-
-    if (!input.conflictConfirmed) {
-      throw new BadRequestException('You must confirm no conflict of interest');
-    }
-
-    const totalScore = sc.criterionScores.reduce((sum, cs) => sum + (cs.score || 0), 0);
-    const newStatus = sc.status === 'REOPENED' ? 'RESUBMITTED' : 'SUBMITTED';
-
-    const updated = await this.prisma.scorecard.update({
-      where: { id: sc.id },
-      data: { status: newStatus as ScorecardStatus, totalScore, conflictConfirmed: true, submittedAt: new Date() },
-      include: {
-        judge: true, team: true,
-        criterionScores: { include: { criterion: { include: { parent: true } } }, orderBy: { criterion: { displayOrder: 'asc' } } },
-      },
-    });
-
-    await this.audit.log({
-      userId, eventId: sc.eventId,
-      action: AuditAction.UPDATE, entityType: 'Scorecard', entityId: sc.id,
-      oldValues: { status: sc.status }, newValues: { status: newStatus, totalScore },
+    await this.core.writeScores({
+      scorecardId: input.scorecardId,
+      eventId: sc.eventId,
+      scores: (input as any).scores ?? [],
+      overallStrengths: (input as any).overallStrengths,
+      areasForImprovement: (input as any).areasForImprovement,
+      recommendation: (input as any).recommendation,
+      submit: true,
+      // Optional now. The portal never asked a judge to confirm anything, so a
+      // hard requirement here would have rejected every judge submission once
+      // the two paths merged. Recorded when a caller genuinely asked.
+      conflictConfirmed: input.conflictConfirmed,
+      actorId: userId,
     });
 
     this.recalculateRankings(sc.eventId, userId);
 
-    return this.enrichScorecard(updated);
+    return this.findOne(input.scorecardId);
   }
 
   async reopen(scorecardId: string, reason: string, userId: string) {

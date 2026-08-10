@@ -24,6 +24,15 @@ export class TeamRanking {
   @Field(() => [CriterionAverage]) criterionAverages!: CriterionAverage[];
   @Field({ nullable: true }) tieBreakNote?: string;
   @Field({ nullable: true }) judgeNames?: string;
+  /**
+   * True only where a tie survived every tie-break — equal score, equal best
+   * criterion average, equal judge count. A shared rank is then a stated
+   * outcome for a coordinator to resolve, not an artefact of how the rows were
+   * written.
+   */
+  @Field() tied!: boolean;
+  /** Counted scorecards expected for this team, i.e. judges not on break. */
+  @Field(() => Int) expectedJudgeCount!: number;
 }
 
 @ObjectType()
@@ -36,4 +45,9 @@ export class RankingOutput {
   @Field(() => Int) teamsRanked!: number;
   @Field(() => Int) teamsWithIncompleteScores!: number;
   @Field({ nullable: true }) calculatedAt?: string;
+  /**
+   * Conditions a coordinator must see before treating these standings as
+   * final — a reopened scorecard, a team short of judges, a surviving tie.
+   */
+  @Field(() => [String]) warnings!: string[];
 }

@@ -5,6 +5,7 @@ import { GlobalExceptionFilter } from './global-exception.filter';
 import { LoggingInterceptor } from './logging.interceptor';
 import { TimeoutInterceptor } from './timeout.interceptor';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -19,6 +20,22 @@ async function bootstrap() {
    * MIME sniffing, transport — are all on.
    */
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+  /**
+   * Request body size.
+   *
+   * Set explicitly rather than inheriting Express's 100KB default. A body over
+   * the default was rejected by the body parser before reaching any handler,
+   * which surfaced as a 500 rather than a validation error — so a payload the
+   * application had a clear opinion about never got the chance to express it.
+   *
+   * 1MB is far more than any legitimate scorecard: comments are capped at 2,000
+   * characters and summaries at 5,000, so a full submission is a few kilobytes.
+   * The margin exists so that oversized input is caught by validation, which
+   * names the offending field, rather than by the parser, which cannot.
+   */
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ limit: '1mb', extended: true }));
 
   /**
    * CORS.

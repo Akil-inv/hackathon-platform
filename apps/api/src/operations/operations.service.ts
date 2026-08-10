@@ -14,7 +14,22 @@ export class OperationsService {
     private audit: AuditService,
   ) {}
 
+  /**
+   * A malformed id reaches Prisma's uuid cast and throws an unhandled 500 with
+   * a stack trace, rather than a clean 404. Checked before every lookup that
+   * takes an id from a caller.
+   */
+  private assertUuid(value: string | null | undefined, label: string) {
+    if (!value || !OperationsService.UUID_RE.test(String(value))) {
+      throw new NotFoundException(`${label} not found`);
+    }
+  }
+
+  private static readonly UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   private async getSessionFull(sessionId: string) {
+    this.assertUuid(sessionId, 'Session');
     const session = await this.prisma.judgingSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -27,13 +42,44 @@ export class OperationsService {
     return session;
   }
 
-  private assertEditable(session: any) {
+  private assertEditable(session: { stage?: string } | null | undefined) {
+    // A session with no stage cannot be shown to be editable, so it is treated
+    // as not editable. Reading `.stage` off an undefined session would have
+    // thrown a TypeError and passed the check by accident.
+    if (!session?.stage) {
+      throw new BadRequestException('Session has no stage and cannot be modified');
+    }
     if (['COMPLETED', 'CANCELLED'].includes(session.stage)) {
       throw new BadRequestException(`Cannot modify a ${session.stage} session`);
     }
   }
 
-  private async isJudgeBusyInSlot(judgeId: string, slotId: string, excludeSessionId?: string) {
+  /**
+   * `findFirst` returning nothing means "no such assignment" — which is also
+   * what a nonexistent judge or slot produces. Left unchecked, a typo'd id read
+   * as "this judge is free" and passed every safety check on the way to a
+   * double-booking. The ids are verified so absence means absence.
+   */
+  private async isJudgeBusyInSlot(
+    judgeId: string,
+    slotId: string,
+    excludeSessionId?: string,
+    // Set when the ids came from a query rather than from a caller, so the
+    // existence lookups can be skipped. Never set on a user-supplied path.
+    idsKnownValid = false,
+  ) {
+    this.assertUuid(judgeId, 'Judge');
+    this.assertUuid(slotId, 'Time slot');
+
+    if (!idsKnownValid) {
+    const [judge, slot] = await Promise.all([
+      this.prisma.judge.findUnique({ where: { id: judgeId }, select: { id: true, deletedAt: true } }),
+      this.prisma.timeSlot.findUnique({ where: { id: slotId }, select: { id: true } }),
+    ]);
+    if (!judge || judge.deletedAt) throw new NotFoundException('Judge not found');
+    if (!slot) throw new NotFoundException('Time slot not found');
+    }
+
     const found = await this.prisma.sessionJudge.findFirst({
       where: {
         judgeId,
@@ -47,7 +93,24 @@ export class OperationsService {
     return !!found;
   }
 
-  private async hasConflict(judgeId: string, teamId: string) {
+  /**
+   * Same shape as isJudgeBusyInSlot, and more serious: "no declaration found"
+   * and "no such judge" both returned false, so a bad id read as "no conflict"
+   * and cleared a judge to score a team they may well have a stake in.
+   */
+  private async hasConflict(judgeId: string, teamId: string, idsKnownValid = false) {
+    this.assertUuid(judgeId, 'Judge');
+    this.assertUuid(teamId, 'Team');
+
+    if (!idsKnownValid) {
+    const [judge, team] = await Promise.all([
+      this.prisma.judge.findUnique({ where: { id: judgeId }, select: { id: true, deletedAt: true } }),
+      this.prisma.team.findUnique({ where: { id: teamId }, select: { id: true, deletedAt: true } }),
+    ]);
+    if (!judge || judge.deletedAt) throw new NotFoundException('Judge not found');
+    if (!team || team.deletedAt) throw new NotFoundException('Team not found');
+    }
+
     const found = await this.prisma.conflictDeclaration.findFirst({
       where: { judgeId, teamId, status: 'ACTIVE' },
     });
@@ -58,9 +121,12 @@ export class OperationsService {
   private async checkJudgeRoomMovements(judgeId: string, eventId: string, newSlotId: string, newRoomId: string, excludeSessionId?: string): Promise<string[]> {
     const warnings: string[] = [];
     
-    // Get the new slot's time
+    // A missing slot used to return an empty warnings array, which a
+    // coordinator reads as "no conflicts" — a green light produced by a row
+    // that does not exist.
+    this.assertUuid(newSlotId, 'Time slot');
     const newSlot = await this.prisma.timeSlot.findUnique({ where: { id: newSlotId } });
-    if (!newSlot) return warnings;
+    if (!newSlot) throw new NotFoundException('Time slot not found');
     
     // Get all sessions this judge is assigned to in this event
     const judgeSessions = await this.prisma.sessionJudge.findMany({
@@ -742,8 +808,8 @@ export class OperationsService {
     const candidates = await Promise.all(
       allJudges.filter(j => !currentIds.has(j.id)).map(async (j) => {
         const load = await this.getJudgeLoad(j.id, session.eventId);
-        const conflict = await this.hasConflict(j.id, session.teamId);
-        const busy = await this.isJudgeBusyInSlot(j.id, session.timeSlotId);
+        const conflict = await this.hasConflict(j.id, session.teamId, true);
+        const busy = await this.isJudgeBusyInSlot(j.id, session.timeSlotId, undefined, true);
         let score = 100;
         if (j.status !== 'ACTIVE') score -= 80;
         if (conflict) score -= 90;

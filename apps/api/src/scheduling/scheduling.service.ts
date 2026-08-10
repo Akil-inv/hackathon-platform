@@ -1,7 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { AuditAction, SlotType } from '@prisma/client';
+import { AuditAction, SlotType, SessionStage } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 // Anchoring was replaced by panel composition — see the PANEL constant below.
 // anchors.ts is retained for reference and is no longer called.
@@ -17,7 +17,13 @@ export class SchedulingService {
     private audit: AuditService,
     private config: ConfigService,
   ) {
-    this.schedulerUrl = this.config.get('SCHEDULER_URL', 'http://localhost:8000');
+    // getOrThrow, not get-with-default. A missing SCHEDULER_URL used to fall
+    // back to localhost:8000 — which is not even the port this scheduler runs
+    // on locally — so the API started cleanly and then failed at the one moment
+    // it mattered, reporting 'Cannot reach scheduler' with nothing pointing at
+    // the cause. An environment missing this variable is misconfigured, and it
+    // should say so at boot rather than during a solve.
+    this.schedulerUrl = this.config.getOrThrow<string>('SCHEDULER_URL');
   }
 
   async generateSchedule(
@@ -48,8 +54,18 @@ export class SchedulingService {
       }),
       // Sessions that already exist — manually placed, or left from an earlier
       // partial generation. These are kept as-is and worked around.
+      //
+      // CANCELLED and NO_SHOW are excluded. A cancelled session used to put its
+      // team into scheduledTeamIds and its room-slot into lockedSessions, so
+      // cancelling a session silently removed that team from the schedule and
+      // held its room-slot against everyone else. Nothing errored: the team was
+      // filtered out before the solve, so it never appeared in
+      // unscheduledTeams either.
+      //
+      // RESCHEDULED stays in the list deliberately. A rescheduled session is a
+      // real placement that has moved, not one that has gone away.
       this.prisma.judgingSession.findMany({
-        where: { eventId },
+        where: { eventId, stage: { notIn: [SessionStage.CANCELLED, SessionStage.NO_SHOW] } },
         include: { judges: true },
       }),
     ]);
@@ -307,7 +323,10 @@ export class SchedulingService {
             // succeeded, so the run continues and the coordinator is told which
             // pass could not be placed.
             allWarnings.push(`${pass.label} could not be placed.`);
-            allUnscheduled.push(...pass.teams.map(t => t.name));
+            // Ids, not names. The success path below pushes ids from the
+            // solver, so mixing the two made this array unusable for any caller
+            // that looks a team up — half the entries would silently miss.
+            allUnscheduled.push(...pass.teams.map(t => t.id));
             continue;
           }
 
@@ -327,7 +346,10 @@ export class SchedulingService {
         }
 
         result = {
-          success: allSessions.length > 0,
+          // Every team placed, or it did not succeed. `allSessions.length > 0`
+          // reported success when one team out of seventy-nine was placed and
+          // ten passes had failed.
+          success: allUnscheduled.length === 0 && allSessions.length > 0,
           sessions: allSessions,
           unscheduled_teams: allUnscheduled,
           warnings: [describePlan(passPlan), ...allWarnings],
@@ -347,6 +369,36 @@ export class SchedulingService {
         }
 
         result = await response.json();
+      }
+
+      // QA tee: captures the solve for tools/qa/check_schedule.py.
+      // Off unless SCHEDULE_TEE_DIR is set. Wrapped so a write failure can
+      // never fail a schedule generation.
+      //
+      // Captures the base payload and the assembled result, so in guided mode
+      // the checker sees the whole schedule rather than one pass. Per-pass
+      // restrict_to_room_ids and cluster are not in the base payload.
+      if (process.env.SCHEDULE_TEE_DIR) {
+        try {
+          const fs = await import('node:fs/promises');
+          const dir = process.env.SCHEDULE_TEE_DIR;
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          await fs.mkdir(dir, { recursive: true });
+          await fs.writeFile(
+            `${dir}/${stamp}-request.json`,
+            JSON.stringify(payload, null, 2),
+          );
+          await fs.writeFile(
+            `${dir}/${stamp}-response.json`,
+            JSON.stringify(result, null, 2),
+          );
+          console.log(
+            `[schedule-tee] wrote ${dir}/${stamp}-{request,response}.json ` +
+            `(guided=${guided}, sessions=${result.sessions?.length ?? 0})`,
+          );
+        } catch (teeError) {
+          console.warn(`[schedule-tee] failed: ${teeError}`);
+        }
       }
 
       await this.audit.log({

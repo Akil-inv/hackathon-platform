@@ -522,6 +522,7 @@ type RankingOutput {
   teamsWithIncompleteScores: Int!
   trackId: String
   trackName: String
+  warnings: [String!]!
 }
 
 enum RankingStatus {
@@ -865,6 +866,7 @@ type TeamMemberEntity {
 type TeamRanking {
   aggregatedScore: Float!
   criterionAverages: [CriterionAverage!]!
+  expectedJudgeCount: Int!
   judgeCount: Int!
   judgeNames: String
   projectName: String!
@@ -872,6 +874,7 @@ type TeamRanking {
   teamId: String!
   teamName: String!
   tieBreakNote: String
+  tied: Boolean!
   trackId: String
   trackName: String
 }
