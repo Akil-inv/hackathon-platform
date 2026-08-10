@@ -114,6 +114,17 @@ if ! docker-compose build $SERVICES; then
 fi
 ok "built"
 
+# ── 4b. migrate ─────────────────────────────────────────────────────────────
+
+# After the build so the image contains the migration files, and before the
+# restart so the new code never starts against an old schema.
+step "migrate"
+if ! docker-compose run --rm api npx prisma migrate deploy; then
+  err "migration failed — nothing has been restarted, the old containers are still serving"
+  exit 1
+fi
+ok "migrations applied"
+
 # ── 5. restart ──────────────────────────────────────────────────────────────
 
 step "restart"
