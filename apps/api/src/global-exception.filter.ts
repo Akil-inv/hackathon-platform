@@ -18,9 +18,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (host.getType<GqlContextType>() === 'graphql') {
       const gqlHost = GqlArgumentsHost.create(host);
       const info = gqlHost.getInfo();
-      const message = exception instanceof HttpException
+      // Prisma's message is a multi-line invocation dump. Useful in a log,
+      // unreadable in one, so it is collapsed to its first line here — and
+      // what the caller sees is decided by formatError in app.module.ts, not
+      // by this string.
+      const rawMessage = exception instanceof HttpException
         ? exception.message
         : exception.message || 'Internal server error';
+      const message = String(rawMessage).split('\n')[0].trim();
 
       this.logger.error(
         `GraphQL ${info?.fieldName || 'unknown'}: ${message}`,
