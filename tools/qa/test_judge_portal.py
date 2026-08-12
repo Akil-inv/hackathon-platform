@@ -38,7 +38,7 @@ except ImportError:
     raise SystemExit(2)
 
 
-VERSION = "2026-08-10.3 (comment limits, uuid guard)"
+VERSION = "2026-08-12.1 (submit without a prior draft)"
 
 PASS, FAIL, BUG, INFO = "PASS", "FAIL", "BUG ", "INFO"
 
@@ -458,6 +458,37 @@ def run(conn, base: str, event_id: str, salt: str, r: Results) -> None:
         r.fail("submit totals disagree",
                f"total_score={sub['total_score']} payload={expected_total} "
                f"stored={sub['stored']}")
+
+    # ── 7b. Submit with no prior draft ──────────────────────────────────────
+    # The sequence a judge who works quickly actually uses: open the scorecard,
+    # fill it in one sitting, press Submit. No draft was ever saved and the
+    # twenty-second autosave has not fired, so the scorecard is still
+    # NOT_STARTED.
+    #
+    # This shipped broken. Every existing check saved a draft first, so 33
+    # passing tests said nothing about it.
+    ex(conn, "DELETE FROM criterion_scores WHERE scorecard_id = %s",
+       (judge_a["scorecard_id"],))
+    ex(conn, "UPDATE scorecards SET status='NOT_STARTED', total_score=NULL, "
+             "submitted_at=NULL WHERE id = %s", (judge_a["scorecard_id"],))
+
+    fresh = q(conn, "SELECT status FROM scorecards WHERE id = %s",
+              (judge_a["scorecard_id"],))[0]
+    st, body = http("POST", f"{api}/{tok_a}/score?event={event_id}",
+                    {"scorecardId": judge_a["scorecard_id"], "scores": full,
+                     "overallStrengths": "s", "areasForImprovement": "a",
+                     "recommendation": "r", "submit": True})
+    after = q(conn, "SELECT status, total_score FROM scorecards WHERE id = %s",
+              (judge_a["scorecard_id"],))[0]
+
+    if after["status"] == "SUBMITTED":
+        r.ok(f"submit straight from {fresh['status']} accepted "
+             f"(no draft saved first)")
+    else:
+        r.fail("submit from NOT_STARTED refused",
+               f"status={st} scorecard={after['status']} — a judge who scores a "
+               f"team in one sitting has not saved a draft, and the autosave "
+               f"has not fired. body={str(body)[:200]}")
 
     # ── 8. Double submit ────────────────────────────────────────────────────
     st, body = http("POST", f"{api}/{tok_a}/score?event={event_id}",

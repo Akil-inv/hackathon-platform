@@ -230,16 +230,20 @@ export class ScoringCoreService {
       );
     }
 
-    // STATE-3. Submitting straight from NOT_STARTED used to be possible through
-    // the portal but not through GraphQL. A submit with no prior save writes a
-    // scorecard whose criterion rows were created by the same request, which is
-    // not a judgement anyone made twice.
-    if (submitting && !['DRAFT', 'REOPENED'].includes(scorecard.status)) {
-      throw new BadRequestException(
-        `Cannot submit a scorecard with status ${scorecard.status}. Enter ` +
-          'scores first.',
-      );
-    }
+    // STATE-3. Nothing further is checked here, and the omission is deliberate.
+    //
+    // This once required a saved draft before a submit — DRAFT or REOPENED
+    // only — on the reasoning that submitting with no prior save writes rows
+    // created by the same request. That reasoning was wrong. A judge who scores
+    // a team in one sitting and presses Submit has never saved a draft and the
+    // twenty-second autosave has not yet fired, so their scorecard is still
+    // NOT_STARTED. The rule refused an ordinary sequence, and only for judges
+    // who worked quickly.
+    //
+    // Whether a draft was saved along the way says nothing about whether the
+    // judgement is complete. SUB-1 checks that, against the template's full
+    // leaf set. The guard above already prevents a second submit, which is the
+    // only status rule a submit needs.
   }
 
   // ───────────────────────────────────────────────────────────────────────
