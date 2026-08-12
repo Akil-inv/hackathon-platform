@@ -47,6 +47,19 @@ type Scorecard = {
 };
 
 const SUBMITTED = ['SUBMITTED', 'RESUBMITTED', 'LOCKED'];
+
+/**
+ * What a judge is being asked for.
+ *
+ * "not started" is wrong for a reopened scorecard — the judge did the work and
+ * a coordinator has asked them to look at it again. Calling that "not started"
+ * suggests the earlier score was lost.
+ */
+function statusLabel(status?: string): string {
+  if (status === 'REOPENED') return 'reopened for revision';
+  if (status === 'DRAFT') return 'half scored';
+  return 'not started';
+}
 const PAGE_SIZE = 3;
 
 /**
@@ -167,12 +180,29 @@ export default function QuadrantView({
 
     // Live is the session the organiser started, not the one the clock says
     // should be running. On a day that slips, the clock is the wrong authority.
-    const live = rows.find(({ s }) => ['IN_PROGRESS', 'SCORING'].includes(s.stage));
+    //
+    // A reopened scorecard is excluded. A coordinator reopening one does not
+    // change the session's stage, so a session still marked SCORING would
+    // otherwise present as "Score now" — as though the team were in the room —
+    // when what is actually being asked for is a correction to work already
+    // done. The judge needs it in AWAITING YOU, with the rest of their
+    // outstanding work.
+    const live = rows.find(
+      ({ s, c }) =>
+        ['IN_PROGRESS', 'SCORING'].includes(s.stage) && c?.status !== 'REOPENED',
+    );
 
     // Outstanding work from any day, oldest first — the one furthest back is
     // the one most at risk of being forgotten.
+    //
+    // Reopened scorecards belong here whatever stage their session is in: the
+    // session may have finished days ago, or may never have been moved past
+    // SCORING. Either way the judge owes a score.
     const needs = rows
-      .filter(({ s, c }) => s.stage === 'COMPLETED' && !SUBMITTED.includes(c?.status ?? 'NOT_STARTED'))
+      .filter(({ s, c }) =>
+        c?.status === 'REOPENED' ||
+        (s.stage === 'COMPLETED' && !SUBMITTED.includes(c?.status ?? 'NOT_STARTED')),
+      )
       .sort((a, b) => (a.s.startTime || '').localeCompare(b.s.startTime || ''));
 
     const next = rows
@@ -378,7 +408,7 @@ export default function QuadrantView({
               {g.needs.slice(0, 2).map(({ s, c }) => (
                 <p key={s.sessionId} style={{ color: FINISH.needs.dim }} className="text-xs sm:text-[15px] truncate">
                   {s.team.name}
-                  <span className="hidden sm:inline"> · {c?.status === 'DRAFT' ? 'half scored' : 'not started'}</span>
+                  <span className="hidden sm:inline"> · {statusLabel(c?.status)}</span>
                 </p>
               ))}
             </Tile>
@@ -450,12 +480,12 @@ export default function QuadrantView({
                       </div>
                       <p className="text-sm text-slate-500 mt-0.5">
                         {dayOf(s.startTime)} · {timeOf(s.startTime)} ·{' '}
-                        {c?.status === 'DRAFT' ? 'half scored' : 'not started'}
+                        {statusLabel(c?.status)}
                       </p>
                     </div>
                     <button type="button" onClick={() => startQueue(page * PAGE_SIZE + i)}
                       className="shrink-0 rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800">
-                      {c?.status === 'DRAFT' ? 'Finish' : 'Score'}
+                      {c?.status === 'REOPENED' ? 'Revise' : c?.status === 'DRAFT' ? 'Finish' : 'Score'}
                     </button>
                   </div>
                 ))}

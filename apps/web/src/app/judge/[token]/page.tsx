@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import DriftMetronome from '@/components/drift-metronome';
 import QuadrantView from '@/components/quadrant-view';
@@ -22,6 +22,18 @@ export default function JudgePortalPage() {
   // What the server held when this scorecard was loaded, and what we last
   // successfully sent. Together these let a save carry only what changed and
   // refuse to overwrite work done on another device (CONCUR-3, CONCUR-4).
+  /**
+   * Whether to mark what is missing.
+   *
+   * A fresh scorecard shows nothing in red. Eleven red boxes on a card a judge
+   * has just opened reads as eleven errors rather than eleven questions, and
+   * the judge has done nothing wrong yet.
+   *
+   * It turns on when they engage — score anything, or press Submit once. From
+   * then on the page points at what is outstanding, and the submit button
+   * locks until it is not.
+   */
+  const [engaged, setEngaged] = useState(false);
   const [serverUpdatedAt, setServerUpdatedAt] = useState<string | null>(null);
   const [savedScores, setSavedScores] = useState<Record<string, { score: number | null; comment: string }>>({});
   const [strengths, setStrengths] = useState('');
@@ -94,6 +106,7 @@ export default function JudgePortalPage() {
     });
     setSavedScores(serverMap);
 
+    setEngaged(restored);
     setRecovered(restored);
     setDirty(false);
     setLastSaved(null);
@@ -174,6 +187,71 @@ export default function JudgePortalPage() {
     };
   }, [activeScorecard, dirty, scores, strengths, improvements, recommendation, serverUpdatedAt]);
 
+  /**
+   * What still stands between this scorecard and a submission.
+   *
+   * The rules are the server's, restated: every leaf criterion scored, and a
+   * comment wherever one is required. They are restated rather than inferred
+   * because a judge should be told what is missing before they press the
+   * button, not after — and a refusal that names nothing leaves them pressing
+   * it again.
+   *
+   * The server keeps its own check regardless. This is a courtesy, not a
+   * guard: if the two ever disagree the server is right, and the judge sees a
+   * message rather than a silent failure.
+   */
+  const outstanding = useMemo(() => {
+    if (!activeScorecard) return { missingScores: [], missingComments: [] };
+
+    const rows = (activeScorecard.criterionScores || []).filter(
+      (cs: any) => !!cs.parentId,
+    );
+
+    const missingScores: string[] = [];
+    const missingComments: string[] = [];
+
+    for (const cs of rows) {
+      const s = scores[cs.criterionId] || { score: null, comment: '' };
+      if (s.score === null || s.score === undefined) {
+        missingScores.push(cs.criterionName || cs.name || 'a criterion');
+      } else if (cs.requiresComment && !(s.comment || '').trim()) {
+        missingComments.push(cs.criterionName || cs.name || 'a criterion');
+      }
+    }
+
+    return { missingScores, missingComments };
+  }, [activeScorecard, scores]);
+
+  const canSubmit =
+    outstanding.missingScores.length === 0 &&
+    outstanding.missingComments.length === 0;
+
+  /** A sentence a judge can act on, naming everything at once. */
+  const outstandingText = useMemo(() => {
+    const { missingScores, missingComments } = outstanding;
+    if (!missingScores.length && !missingComments.length) return '';
+
+    const list = (names: string[]) =>
+      names.length <= 3
+        ? names.join(', ')
+        : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+
+    const parts: string[] = [];
+    if (missingScores.length) {
+      parts.push(
+        `${missingScores.length} ${missingScores.length > 1 ? 'criteria' : 'criterion'} ` +
+        `not yet scored: ${list(missingScores)}`,
+      );
+    }
+    if (missingComments.length) {
+      parts.push(
+        `${missingComments.length} comment${missingComments.length > 1 ? 's' : ''} ` +
+        `required: ${list(missingComments)}`,
+      );
+    }
+    return parts.join('. ');
+  }, [outstanding]);
+
   // A last line of defence for a deliberate close with work outstanding.
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
@@ -199,6 +277,18 @@ export default function JudgePortalPage() {
       });
 
       if (auto && changed.length === 0 && !dirty) { setSaving(false); return; }
+
+      // Refuse locally with a specific reason. The server refuses too, and its
+      // message names only the first failing criterion; this names all of them,
+      // and does so without a round trip.
+      if (submit && !canSubmit) {
+        // The press that cannot succeed is the press that explains itself: it
+        // turns on the highlighting and then the button locks.
+        setEngaged(true);
+        setMessage(`Not submitted. ${outstandingText}`);
+        setSaving(false);
+        return;
+      }
 
       const body = {
         scorecardId: activeScorecard.id,
@@ -460,7 +550,10 @@ export default function JudgePortalPage() {
 
                 const s = scores[cs.criterionId] || { score: null, comment: '' };
                 const isLocked = ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status);
-                const commentMissing = cs.requiresComment && !(s.comment || '').trim();
+                // Only marked once the judge has engaged — see `engaged`.
+                const scoreMissing = engaged && (s.score === null || s.score === undefined);
+                const commentMissing =
+                  engaged && cs.requiresComment && !(s.comment || '').trim();
 
                 return (
                   <div key={cs.criterionId}>
@@ -489,13 +582,19 @@ export default function JudgePortalPage() {
                     <div className="flex items-center gap-4 mb-2">
                       <input type="range" min="0" max={cs.maxScore} step="1" value={s.score ?? 0} disabled={isLocked}
                       style={{ height: 28 }}
-                        onChange={(e) => { setDirty(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: parseInt(e.target.value) } })); }}
+                        onChange={(e) => { setDirty(true); setEngaged(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: parseInt(e.target.value) } })); }}
                         className="flex-1 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#7c3aed] disabled:opacity-50" />
                       <input type="number" min="0" max={cs.maxScore} value={s.score ?? ''} disabled={isLocked}
-                        onChange={(e) => { setDirty(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.min(parseInt(e.target.value) || 0, cs.maxScore) } })); }}
-                        className="w-16 bg-[#f4f6fa] border border-slate-300 rounded-lg px-3 py-1.5 text-center text-base font-mono text-slate-900 outline-none disabled:opacity-50" />
+                        onChange={(e) => { setDirty(true); setEngaged(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.min(parseInt(e.target.value) || 0, cs.maxScore) } })); }}
+                        className={`w-16 bg-[#f4f6fa] border rounded-lg px-3 py-1.5 text-center text-base font-mono text-slate-900 outline-none disabled:opacity-50 ${
+                          scoreMissing ? 'border-2 border-red-500 bg-red-50' : 'border-slate-300'
+                        }`} />
                       <span className="text-sm text-slate-500">/ {cs.maxScore}</span>
                     </div>
+
+                    {scoreMissing && (
+                      <p className="mb-2 text-sm text-red-700">Not yet scored.</p>
+                    )}
 
                     {/* Score bar */}
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
@@ -522,10 +621,10 @@ export default function JudgePortalPage() {
                       placeholder={cs.requiresComment ? 'Why this score? Required.' : 'Optional comment...'}
                       rows={2}
                       className={`w-full bg-slate-50 rounded-lg px-4 py-3 text-base text-slate-900 placeholder-slate-500 outline-none resize-none disabled:opacity-50 border-2 focus:bg-white ${
-                        commentMissing ? 'border-amber-400' : 'border-slate-200 focus:border-slate-400'
+                        commentMissing ? 'border-red-500 bg-red-50' : 'border-slate-200 focus:border-slate-400'
                       } focus:border-slate-900`} />
                     {commentMissing && (
-                      <p className="mt-1.5 text-sm text-amber-700">
+                      <p className="mt-1.5 text-sm text-red-700">
                         A comment is required before this scorecard can be submitted.
                       </p>
                     )}
@@ -547,6 +646,18 @@ export default function JudgePortalPage() {
               </div>
             </div>
 
+            {/* What is still outstanding, before the judge presses anything. */}
+            {!['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(activeScorecard.status) &&
+              engaged && !canSubmit && (
+                <div
+                  id="submit-outstanding"
+                  className="mt-4 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900"
+                >
+                  <span className="font-semibold">Not ready to submit. </span>
+                  {outstandingText}
+                </div>
+              )}
+
             {/* Action buttons */}
             <div className="flex flex-col gap-4 mt-4 pt-4 border-t border-slate-200 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -561,9 +672,29 @@ export default function JudgePortalPage() {
                     className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 text-base rounded-lg disabled:opacity-50">
                     {saving ? 'Saving...' : 'Save draft'}
                   </button>
-                  <button type="button" onClick={() => saveOrSubmit(true)} disabled={saving}
-                    className="w-full sm:w-auto px-5 py-3.5 sm:py-2 bg-slate-900 hover:bg-slate-800 text-white text-base font-medium rounded-lg disabled:opacity-50">
-                    {saving ? 'Submitting...' : 'Submit scorecard'}
+                  {/*
+                    Disabled only once the judge has engaged and the page is
+                    showing them what is missing. Disabling it on arrival would
+                    leave a judge with a dead button and nothing to read; this
+                    way the first press turns on the highlighting, and from then
+                    on the button is locked and the reason is on screen.
+                  */}
+                  <button type="button" onClick={() => saveOrSubmit(true)}
+                    disabled={saving || (engaged && !canSubmit)}
+                    aria-describedby={canSubmit ? undefined : 'submit-outstanding'}
+                    title={canSubmit ? undefined : outstandingText}
+                    className={`w-full sm:w-auto px-5 py-3.5 sm:py-2 text-base font-medium rounded-lg disabled:cursor-not-allowed ${
+                      canSubmit
+                        ? 'bg-slate-900 hover:bg-slate-800 text-white'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}>
+                    {saving
+                      ? 'Submitting...'
+                      : canSubmit
+                        ? 'Submit scorecard'
+                        : `Submit scorecard (${
+                            outstanding.missingScores.length + outstanding.missingComments.length
+                          } left)`}
                   </button>
                 </div>
               ) : (
