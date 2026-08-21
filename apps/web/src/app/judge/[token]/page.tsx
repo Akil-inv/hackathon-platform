@@ -321,11 +321,36 @@ export default function JudgePortalPage() {
         return;
       }
 
+      /**
+       * Send each field only when the judge changed it.
+       *
+       * The payload used to carry `score: s.score` unconditionally, so a save
+       * that only touched a comment sent `score: null` for that criterion and
+       * the server wrote the null over a stored score. Comments were spared
+       * because they went out as `comment || undefined`, which Prisma leaves
+       * alone — an asymmetry with nothing behind it, and the field it erased
+       * is the one the ranking is built from.
+       *
+       * Omitting a field now means "not changing this". Clearing one means
+       * sending it explicitly as null, which only happens when the judge
+       * empties the box.
+       */
       const body = {
         scorecardId: activeScorecard.id,
-        scores: changed.map(([criterionId, s]) => ({
-          criterionId, score: s.score, comment: s.comment || undefined,
-        })),
+        scores: changed.map(([criterionId, s]) => {
+          const was = savedScores[criterionId];
+          const entry: any = { criterionId };
+
+          const scoreChanged = !was || was.score !== s.score;
+          const commentChanged = !was || (was.comment || '') !== (s.comment || '');
+
+          // On submit the server validates against everything it holds, so it
+          // is sent whole rather than as a diff.
+          if (submit || scoreChanged) entry.score = s.score;
+          if (submit || commentChanged) entry.comment = s.comment || null;
+
+          return entry;
+        }),
         overallStrengths: strengths || undefined,
         areasForImprovement: improvements || undefined,
         recommendation: recommendation || undefined,

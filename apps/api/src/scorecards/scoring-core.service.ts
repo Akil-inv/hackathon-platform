@@ -36,8 +36,16 @@ const UUID_RE =
 
 export interface IncomingScore {
   criterionId: string;
-  /** null clears a previously entered score. */
-  score: number | null;
+  /**
+   * Omit to leave the stored score alone; send null to clear it.
+   *
+   * These used to be the same thing, and only for the score: an absent comment
+   * was left alone while an absent score was written as null. So a save that
+   * touched only a comment erased the score beside it — the field the ranking
+   * is built from, silently, on a routine autosave that is not audited.
+   */
+  score?: number | null;
+  /** Omit to leave the stored comment alone; send null to clear it. */
   comment?: string | null;
 }
 
@@ -280,7 +288,13 @@ export class ScoringCoreService {
         continue;
       }
 
-      // A null score clears a previously entered value. Nothing to validate.
+      // An omitted score is not a change; a null one is a deliberate clear.
+      // Both skip range validation, but they must stay distinguishable — the
+      // write below keys off whether the property is present at all.
+      if (!('score' in s)) {
+        accepted.push({ ...s });
+        continue;
+      }
       if (s.score === null || s.score === undefined) {
         accepted.push({ ...s, score: null });
         continue;
@@ -411,6 +425,16 @@ export class ScoringCoreService {
       }
 
       for (const s of accepted) {
+        // Only what the caller supplied. `undefined` is Prisma's "leave this
+        // column alone"; an explicit null clears it. Building the object this
+        // way means a partial payload cannot erase a field it never mentioned,
+        // whatever client sent it.
+        const data: { score?: number | null; comment?: string | null } = {};
+        if ('score' in s) data.score = s.score ?? null;
+        if ('comment' in s) data.comment = s.comment ?? null;
+
+        if (Object.keys(data).length === 0) continue;
+
         await tx.criterionScore.update({
           where: {
             scorecardId_criterionId: {
@@ -418,7 +442,7 @@ export class ScoringCoreService {
               criterionId: s.criterionId,
             },
           },
-          data: { score: s.score, comment: s.comment ?? undefined },
+          data,
         });
       }
 

@@ -38,7 +38,7 @@ except ImportError:
     raise SystemExit(2)
 
 
-VERSION = "2026-08-12.1 (submit without a prior draft)"
+VERSION = "2026-08-21.1 (partial saves must not erase)"
 
 PASS, FAIL, BUG, INFO = "PASS", "FAIL", "BUG ", "INFO"
 
@@ -399,6 +399,61 @@ def run(conn, base: str, event_id: str, salt: str, r: Results) -> None:
                "(indistinguishable from a client that forgot it)")
     else:
         r.ok("a score omitted from the payload leaves the stored value alone")
+
+    # ── 5c. A partial save must not erase what it did not mention ───────────
+    # A judge scores a team, then comes back later and adds a comment. The
+    # comment-only save used to carry `score: null` for that criterion and the
+    # server wrote it, so the score vanished — silently, on a routine autosave
+    # that is not audited, and only for the field the ranking is built from.
+    ex(conn, "DELETE FROM criterion_scores WHERE scorecard_id = %s",
+       (judge_a["scorecard_id"],))
+    ex(conn, "UPDATE scorecards SET status='NOT_STARTED', total_score=NULL, "
+             "submitted_at=NULL WHERE id = %s", (judge_a["scorecard_id"],))
+
+    http("POST", f"{api}/{tok_a}/score?event={event_id}",
+         {"scorecardId": judge_a["scorecard_id"],
+          "scores": [{"criterionId": c0["id"], "score": 5}]})
+
+    # Now a comment on the same criterion, with no score in the payload.
+    http("POST", f"{api}/{tok_a}/score?event={event_id}",
+         {"scorecardId": judge_a["scorecard_id"],
+          "scores": [{"criterionId": c0["id"], "comment": "added later"}]})
+
+    row = q(conn, "SELECT score, comment FROM criterion_scores "
+                  "WHERE scorecard_id = %s AND criterion_id = %s",
+            (judge_a["scorecard_id"], c0["id"]))[0]
+    if row["score"] == 5 and row["comment"] == "added later":
+        r.ok("a comment-only save keeps the score beside it")
+    else:
+        r.fail("a comment-only save erased the score",
+               f"score={row['score']} comment={row['comment']} — expected 5 and "
+               f"'added later'")
+
+    # And the reverse: a score-only save must keep the comment.
+    http("POST", f"{api}/{tok_a}/score?event={event_id}",
+         {"scorecardId": judge_a["scorecard_id"],
+          "scores": [{"criterionId": c0["id"], "score": 6}]})
+    row = q(conn, "SELECT score, comment FROM criterion_scores "
+                  "WHERE scorecard_id = %s AND criterion_id = %s",
+            (judge_a["scorecard_id"], c0["id"]))[0]
+    if row["score"] == 6 and row["comment"] == "added later":
+        r.ok("a score-only save keeps the comment beside it")
+    else:
+        r.fail("a score-only save erased the comment",
+               f"score={row['score']} comment={row['comment']}")
+
+    # An explicit null still clears, because a judge emptying a box means it.
+    http("POST", f"{api}/{tok_a}/score?event={event_id}",
+         {"scorecardId": judge_a["scorecard_id"],
+          "scores": [{"criterionId": c0["id"], "score": None}]})
+    row = q(conn, "SELECT score, comment FROM criterion_scores "
+                  "WHERE scorecard_id = %s AND criterion_id = %s",
+            (judge_a["scorecard_id"], c0["id"]))[0]
+    if row["score"] is None and row["comment"] == "added later":
+        r.ok("an explicit null clears the score and leaves the comment")
+    else:
+        r.fail("an explicit null did not clear the score",
+               f"score={row['score']} comment={row['comment']}")
 
     # ── 6. Cross-judge write ────────────────────────────────────────────────
     if judge_b and judge_b["scorecard_id"]:
