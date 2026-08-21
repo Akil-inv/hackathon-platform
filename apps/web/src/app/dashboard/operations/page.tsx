@@ -454,7 +454,20 @@ export default function CommandCentrePage() {
         </div>
         <div className="sess-meta">
           <span className="sess-time">{getTime(s)}</span>
-          <span>{s.judges?.length || 0} judges - {s.scorecardsSubmitted || 0}/{s.scorecardsTotal || 0} scored</span>
+          {/*
+            Judges expected, not judges assigned. A session where one stepped
+            out reads "3 judges - 2/2 scored" otherwise, which invites a
+            coordinator to chase a judge who is not coming.
+          */}
+          <span>
+            {(s.judges?.length || 0) - (s.judgesOnBreak || 0)} judges
+            {(s.judgesOnBreak || 0) > 0 && (
+              <span style={{ color: '#8ea3bc' }}>
+                {' '}({s.judgesOnBreak} stepped out)
+              </span>
+            )}
+            {' '}- {s.scorecardsSubmitted || 0}/{s.scorecardsTotal || 0} scored
+          </span>
         </div>
 
         {/* Expanded: full details */}
@@ -493,9 +506,9 @@ export default function CommandCentrePage() {
               {(s.judges || []).map((j: any) => (
                 <div key={j.judgeId} className="exp-judge">
                   <span className="exp-judge-name">{j.judgeName}</span>
-                  <span className="exp-judge-type">{j.judgeType || ''}</span>
+                  <span className="exp-judge-type">{j.judgeTier || j.judgeType || ''}</span>
                   {j.onBreak && (
-                    <span style={{fontSize:12,color:'#8ea3bc',fontStyle:'italic'}}>on break</span>
+                    <span style={{fontSize:12,color:'#f59e0b',fontWeight:500}}>stepped out</span>
                   )}
                   {/* Either IG seat, and only when the other is not already
                       out — the server refuses it either way, but a control that

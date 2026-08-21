@@ -74,8 +74,8 @@ export const SESSIONS_QUERY = `
     sessions(eventId: $eventId) {
       id teamId teamName projectName trackName teamCountry teamPlatform roomId roomName timeSlotId stage
       scheduledStart scheduledEnd
-      judges { judgeId judgeName attended }
-      scorecardsSubmitted scorecardsTotal
+      judges { judgeId judgeName judgeTier attended onBreak }
+      scorecardsSubmitted scorecardsTotal judgesOnBreak
     }
   }
 `;
@@ -201,7 +201,7 @@ export const DASHBOARD_SESSIONS_QUERY = `
   query DashboardSessions($eventId: String!) {
     sessions(eventId: $eventId) {
       id teamId teamName roomName stage scheduledStart scheduledEnd
-      scorecardsSubmitted scorecardsTotal
+      scorecardsSubmitted scorecardsTotal judgesOnBreak
     }
   }
 `;

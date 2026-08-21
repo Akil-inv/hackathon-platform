@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useQuery } from '@/lib/use-graphql';
 import { useAuthStore } from '@/lib/auth-store';
 import { createClient } from '@/lib/graphql-client';
-import { EVENTS_QUERY, SCORECARDS_BY_EVENT_QUERY, SCORING_TEMPLATES_QUERY } from '@/lib/queries';
+import { EVENTS_QUERY, SCORECARDS_BY_EVENT_QUERY, SCORING_TEMPLATES_QUERY, SESSIONS_QUERY } from '@/lib/queries';
 import { useEventId } from '@/lib/event-store';
 
 const REOPEN_MUTATION = `mutation R($id: String!, $reason: String!) { reopenScorecard(scorecardId: $id, reason: $reason) { id status } }`;
@@ -18,8 +18,31 @@ export default function ScoringPage() {
 
   const { data: scData } = useQuery<any>(SCORECARDS_BY_EVENT_QUERY, eventId ? { eventId } : undefined);
   const { data: tmplData } = useQuery<any>(SCORING_TEMPLATES_QUERY, eventId ? { eventId } : undefined);
+  /**
+   * Sessions, for the break state alone.
+   *
+   * A break does not delete the scorecard, so counting scorecards counts a
+   * judge who has excused themselves as still owing a score — every team with
+   * someone stepped out sat at "2 of 3 submitted" indefinitely, reading
+   * exactly like a judge who was late.
+   */
+  const { data: sessData } = useQuery<any>(SESSIONS_QUERY, eventId ? { eventId } : undefined);
 
   const scorecards = scData?.scorecardsByEvent || [];
+
+  // Judges who stepped out, keyed by team, so a scorecard can be recognised as
+  // one nobody is waiting on.
+  const steppedOutByTeam = new Map<string, Set<string>>();
+  for (const sess of sessData?.sessions || []) {
+    const out = new Set<string>(
+      (sess.judges || [])
+        .filter((j: any) => j.onBreak)
+        .map((j: any) => j.judgeName),
+    );
+    if (out.size) steppedOutByTeam.set(sess.teamId, out);
+  }
+  const isSteppedOut = (sc: any) =>
+    steppedOutByTeam.get(sc.teamId)?.has(sc.judgeName) ?? false;
   const template = tmplData?.scoringTemplates?.[0];
   const criteria = template?.criteria || [];
 
@@ -46,10 +69,12 @@ export default function ScoringPage() {
   const teams = Array.from(teamMap.values()).sort((a, b) => a.teamName.localeCompare(b.teamName));
 
   // Stats
-  const totalScorecards = scorecards.length;
-  const submitted = scorecards.filter((s: any) => ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(s.status)).length;
-  const drafts = scorecards.filter((s: any) => s.status === 'DRAFT').length;
-  const notStarted = scorecards.filter((s: any) => s.status === 'NOT_STARTED').length;
+  const expectedScorecards = scorecards.filter((s: any) => !isSteppedOut(s));
+  const totalScorecards = expectedScorecards.length;
+  const submitted = expectedScorecards.filter((s: any) => ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(s.status)).length;
+  const drafts = expectedScorecards.filter((s: any) => s.status === 'DRAFT').length;
+  const notStarted = expectedScorecards.filter((s: any) => s.status === 'NOT_STARTED').length;
+  const steppedOutCount = scorecards.length - totalScorecards;
 
   // Selected team detail
   const selTeam = selectedTeam ? teamMap.get(selectedTeam) : null;
@@ -77,9 +102,13 @@ export default function ScoringPage() {
   };
 
   const getTeamProgress = (team: any) => {
-    const total = team.scorecards.length;
-    const done = team.scorecards.filter((s: any) => ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(s.status)).length;
-    return { total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+    // A judge who stepped out is not expected to score, so they are not part
+    // of the total. Counting them leaves the team short forever.
+    const expected = team.scorecards.filter((s: any) => !isSteppedOut(s));
+    const total = expected.length;
+    const done = expected.filter((s: any) => ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(s.status)).length;
+    const steppedOut = team.scorecards.length - total;
+    return { total, done, steppedOut, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
   };
 
   const getTeamAvgScore = (team: any) => {
@@ -144,7 +173,14 @@ export default function ScoringPage() {
       <div className="sc-stats">
         <div className="sc-stat">
           <div className="sc-stat-val">{totalScorecards}</div>
-          <div className="sc-stat-lbl">Total scorecards</div>
+          <div className="sc-stat-lbl">
+            Total scorecards
+            {steppedOutCount > 0 && (
+              <span style={{ color: '#f59e0b' }}>
+                {' '}· {steppedOutCount} excluded
+              </span>
+            )}
+          </div>
         </div>
         <div className="sc-stat">
           <div className="sc-stat-val" style={{color:'#10b981'}}>{submitted}</div>
@@ -207,7 +243,14 @@ export default function ScoringPage() {
                     {(() => { const avg = getTeamAvgScore(selTeam); const prog = getTeamProgress(selTeam); return (
                       <>
                         {avg !== null && <div style={{fontSize:24,fontWeight:600,color:'#fff'}}>{avg}<span style={{fontSize:14,color:'#6b7a90'}}>/100</span></div>}
-                        <div style={{fontSize:12,color:'#6b7a90'}}>{prog.done} of {prog.total} judges submitted</div>
+                        <div style={{fontSize:12,color:'#6b7a90'}}>
+                          {prog.done} of {prog.total} judges submitted
+                          {prog.steppedOut > 0 && (
+                            <span style={{color:'#f59e0b'}}>
+                              {' '}· {prog.steppedOut} stepped out
+                            </span>
+                          )}
+                        </div>
                       </>
                     ); })()}
                   </div>

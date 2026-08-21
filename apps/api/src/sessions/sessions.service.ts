@@ -26,6 +26,11 @@ export class SessionsService {
         judgeName: sj.judge?.name || '',
         judgeTier: sj.judge?.judgeTier || null,
         attended: sj.attended,
+        // Was omitted here while the GraphQL type declared it, so every judge
+        // came back with the default `false` and nothing downstream could show
+        // that someone had stepped out — the third place `on_break` was written
+        // correctly and read nowhere.
+        onBreak: sj.onBreak ?? false,
       })),
       scorecardsSubmitted: (s.scorecards || []).filter((sc: any) =>
         ['SUBMITTED', 'RESUBMITTED', 'LOCKED'].includes(sc.status)
@@ -33,9 +38,12 @@ export class SessionsService {
       // A judge who stepped out is not expected to score, so the session is not
       // waiting on them. Counting them would leave it at two of three forever,
       // which reads exactly like a judge who is late.
-      scorecardsTotal: (s.scorecards || []).filter((sc: any) =>
-        !(s.judges || []).some((sj: any) => sj.judgeId === sc.judgeId && sj.onBreak),
-      ).length,
+      //
+      // Counted from the judges rather than from the scorecards. A break does
+      // not delete the scorecard, so filtering scorecards gave the right answer
+      // by coincidence — and would have stopped doing so the moment a scorecard
+      // existed without a matching session-judge row, or the reverse.
+      scorecardsTotal: (s.judges || []).filter((sj: any) => !sj.onBreak).length,
       judgesOnBreak: (s.judges || []).filter((sj: any) => sj.onBreak).length,
     };
   }
