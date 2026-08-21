@@ -497,7 +497,16 @@ export default function QuadrantView({
                 <div className="flex items-end justify-between">
                   <div>
                     <p style={{ color: FINISH.done.dim }} className="text-xs sm:text-[15px]">
-                      Avg {g.avg}<span className="hidden sm:inline">erage</span> · {g.lo}–{g.hi}
+                      {/*
+                        The label was written as "Avg" plus a hidden "erage",
+                        so it read "Average" on desktop and "Avg" on a phone.
+                        The value landed between the two halves and it rendered
+                        "Avg 16erage" — invisible on mobile, where the second
+                        half is hidden, which is why it survived.
+                      */}
+                      <span className="sm:hidden">Avg</span>
+                      <span className="hidden sm:inline">Average</span>
+                      {' '}{g.avg} · {g.lo}–{g.hi}
                     </p>
                     {g.last && (
                       <p style={{ color: FINISH.done.dim }} className="text-sm truncate mt-0.5">

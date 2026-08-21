@@ -376,6 +376,7 @@ type MessageResult {
 }
 
 type Mutation {
+  activateScoringTemplate(id: String!): ScoringTemplateEntity!
   addCriterion(input: AddCriterionInput!): ScoringCriterionEntity!
   addJudgeToSession(input: AddJudgeInput!): OperationResult!
   approveRankings(eventId: String!, trackId: String): RankingOutput
