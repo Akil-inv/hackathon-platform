@@ -178,6 +178,26 @@ export default function QuadrantView({
     const card = (id: string) => scorecards.find(c => c.sessionId === id);
     const rows = sessions.map(s => ({ s, c: card(s.sessionId) }));
 
+    const flagged = ({ c }: (typeof rows)[number]) => !!c?.flaggedForReview;
+    const submitted = ({ c }: (typeof rows)[number]) =>
+      SUBMITTED.includes(c?.status ?? '');
+
+    /**
+     * A session the judge has stepped out of is not theirs.
+     *
+     * `on_break` was recorded correctly and read nowhere: the ribbon kept
+     * offering "Score now" for a team the judge had just excused themselves
+     * from, and pressing it opened a scorecard the portal will not serve —
+     * /scorecards excludes sessions on break. A confusing screen became an
+     * error one press later.
+     */
+    const steppedOut = ({ s }: (typeof rows)[number]) => !!s.onBreak;
+
+    /** A flag reparents work still owed; a submitted card stays in DONE. */
+    const flaggedUnsubmitted = (r: (typeof rows)[number]) =>
+      flagged(r) && !submitted(r);
+
+
     // Live is the session the organiser started, not the one the clock says
     // should be running. On a day that slips, the clock is the wrong authority.
     //
@@ -188,9 +208,27 @@ export default function QuadrantView({
     // done. The judge needs it in AWAITING YOU, with the rest of their
     // outstanding work.
     const live = rows.find(
-      ({ s, c }) =>
-        ['IN_PROGRESS', 'SCORING'].includes(s.stage) && c?.status !== 'REOPENED',
+      (r) =>
+        ['IN_PROGRESS', 'SCORING'].includes(r.s.stage) &&
+        r.c?.status !== 'REOPENED' &&
+        !flaggedUnsubmitted(r) &&
+        !steppedOut(r),
     );
+
+    /**
+     * A flag takes a card out of every other list.
+     *
+     * The two boxes answer different questions. AWAITING YOU is "what have I
+     * not dealt with"; REVISIT is "what did I deliberately park to come back
+     * to". A judge who scores half a team and flags it has dealt with it — they
+     * have made a decision to return, which is not the same as having
+     * forgotten. Showing it in both blurs the distinction the boxes exist to
+     * draw, and a judge working through AWAITING YOU would keep meeting a card
+     * they had already set aside.
+     *
+     * Clearing the flag puts it back wherever it belongs, so nothing can be
+     * parked and then lost.
+     */
 
     // Outstanding work from any day, oldest first — the one furthest back is
     // the one most at risk of being forgotten.
@@ -199,6 +237,7 @@ export default function QuadrantView({
     // session may have finished days ago, or may never have been moved past
     // SCORING. Either way the judge owes a score.
     const needs = rows
+      .filter((r) => !flaggedUnsubmitted(r) && !steppedOut(r))
       .filter(({ s, c }) =>
         c?.status === 'REOPENED' ||
         (s.stage === 'COMPLETED' && !SUBMITTED.includes(c?.status ?? 'NOT_STARTED')),
@@ -206,11 +245,18 @@ export default function QuadrantView({
       .sort((a, b) => (a.s.startTime || '').localeCompare(b.s.startTime || ''));
 
     const next = rows
+      .filter((r) => !flaggedUnsubmitted(r) && !steppedOut(r))
       .filter(({ s }) => s.stage === 'SCHEDULED' && new Date(s.startTime).getTime() > now - 3600_000)
       .sort((a, b) => (a.s.startTime || '').localeCompare(b.s.startTime || ''));
 
-    const done = rows.filter(({ c }) => SUBMITTED.includes(c?.status ?? ''));
-    const revisit = rows.filter(({ c }) => c?.flaggedForReview);
+    // DONE stays a record of what was submitted, flagged or not: a judge asking
+    // "how many have I finished" is asking about work, not about bookmarks.
+    // The progress bar reads from here.
+    const done = rows.filter(submitted);
+    // Only work still owed. A flag on a submitted scorecard is a note to
+    // nobody: the judge cannot change it without a coordinator reopening it,
+    // and it belongs in DONE with the rest of their finished work.
+    const revisit = rows.filter((r) => flagged(r) && !submitted(r));
 
     const scores = done.map(({ c }) => c?.totalScore ?? 0).filter(n => n > 0);
     return {
@@ -390,11 +436,32 @@ export default function QuadrantView({
                 You stepped out of {sessions.filter(s => s.onBreak).length} session(s)
               </span>
             )}
-            {g.next.length > 0 ? (
-              <>You&rsquo;re all caught up. Next session:{' '}
-                <span className="font-semibold text-slate-900">{g.next[0].s.team.name}</span>
-                {' '}at {timeOf(g.next[0].s.startTime)}</>
-            ) : 'Nothing running.'}
+            {(() => {
+              // Flagged work is set aside, not finished. Saying "all caught up"
+              // over the top of it is how a parked scorecard gets forgotten.
+              // revisit holds only work still owed, so its length is the count.
+              const parked = g.revisit.length;
+
+              const nextBit = g.next.length > 0 ? (
+                <>Next session:{' '}
+                  <span className="font-semibold text-slate-900">{g.next[0].s.team.name}</span>
+                  {' '}at {timeOf(g.next[0].s.startTime)}</>
+              ) : null;
+
+              if (parked > 0) {
+                return (
+                  <>
+                    <span className="font-semibold text-slate-900">
+                      {parked} team{parked > 1 ? 's' : ''} set aside for a second look.
+                    </span>
+                    {nextBit ? <> {nextBit}</> : null}
+                  </>
+                );
+              }
+              return g.next.length > 0
+                ? <>You&rsquo;re all caught up. {nextBit}</>
+                : 'Nothing running.';
+            })()}
           </p>
         </div>
       )}
@@ -447,9 +514,10 @@ export default function QuadrantView({
 
             <Tile kind="revisit" title="REVISIT" subtitle="Flagged for review"
               count={g.revisit.length} unit="teams" cta="View flagged">
-              {g.revisit.slice(0, 2).map(({ s }) => (
+              {g.revisit.slice(0, 2).map(({ s, c }) => (
                 <p key={s.sessionId} style={{ color: FINISH.revisit.dim }} className="text-xs sm:text-[15px] truncate">
                   {s.team.name}
+                  <span className="hidden sm:inline"> · {statusLabel(c?.status)}</span>
                 </p>
               ))}
             </Tile>

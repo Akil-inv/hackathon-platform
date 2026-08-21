@@ -6,6 +6,50 @@ import QuadrantView from '@/components/quadrant-view';
 import { platformColor } from '@/components/platform-chip';
 import UseCasePanel from '@/components/use-case-panel';
 
+
+/**
+ * How a message should look.
+ *
+ * The banner used to turn red only for text containing "Error" or "required",
+ * so `Score for "Test 1" must be between 0 and 25 (got -5)` — a refusal —
+ * rendered in the same green as "Draft saved". A judge skimming between
+ * presentations reads the colour before the words, and a refusal that looks
+ * like a confirmation is how a score is believed to be saved when it is not.
+ *
+ * Matched on meaning rather than on keywords, so a new message gets a sensible
+ * colour without anyone remembering to add it to a list.
+ */
+type Tone = 'bad' | 'warn' | 'good';
+
+const MESSAGE_TONE: Record<Tone, string> = {
+  bad: 'bg-red-500/10 text-red-700 border border-red-200',
+  warn: 'bg-amber-500/10 text-amber-900 border border-amber-200',
+  good: 'bg-green-500/10 text-emerald-700 border border-emerald-200',
+};
+
+function toneOf(message: string): Tone {
+  const m = message.toLowerCase();
+  if (
+    m.startsWith('error') ||
+    m.includes('not submitted') ||
+    m.includes('must be between') ||
+    m.includes('is required') ||
+    m.includes('could not') ||
+    m.includes('failed') ||
+    m.includes('not saved') ||
+    m.includes('already submitted')
+  ) return 'bad';
+
+  if (
+    m.includes('another device') ||
+    m.includes('reload') ||
+    m.includes('check your entries') ||
+    m.includes('behind the current rubric')
+  ) return 'warn';
+
+  return 'good';
+}
+
 export default function JudgePortalPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -46,7 +90,6 @@ export default function JudgePortalPage() {
   // assumption that it saved.
   const [dirty, setDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [recovered, setRecovered] = useState(false);
 
   const apiUrl = typeof window !== 'undefined' ? window.location.origin.replace(':3000', ':4000') : '';
 
@@ -76,38 +119,37 @@ export default function JudgePortalPage() {
     return () => clearInterval(interval);
   }, [token, eventId, activeScorecard]);
 
+  /**
+   * Opens a scorecard from the server, and only from the server.
+   *
+   * There used to be a sessionStorage mirror here, restored ahead of the
+   * server's copy on the reasoning that a tab reclaimed between autosaves
+   * would otherwise lose work. It restored whole entries with Object.assign,
+   * so a cached `{score: 7, comment: ''}` overwrote a stored
+   * `{score: 7, comment: '…'}` — the score matched and the comment was wiped.
+   * A judge would reopen a scorecard and find their comments gone while their
+   * scores remained, with the text sitting safely in the database the whole
+   * time.
+   *
+   * A page that shows something other than what is stored is worse than one
+   * that is slower to load. The autosave already puts work on the server
+   * within twenty seconds and on every tab hide, which is the protection that
+   * matters; the mirror only added a second, quieter source of truth.
+   */
   const openScorecard = (sc: any) => {
     setActiveScorecard(sc);
     const scoreMap: Record<string, { score: number | null; comment: string }> = {};
     sc.criterionScores?.forEach((cs: any) => {
       scoreMap[cs.criterionId] = { score: cs.score, comment: cs.comment || '' };
     });
-    // Anything newer than what the server holds is offered back rather than
-    // silently discarded or silently applied — the judge decides.
-    let restored = false;
-    try {
-      const raw = sessionStorage.getItem(draftKey(sc.id));
-      if (raw) {
-        // The key exists only when there is unsaved work — it is written on
-        // change and removed on every successful save. Its presence is the
-        // signal; no timestamp comparison is needed.
-        const saved = JSON.parse(raw);
-        Object.assign(scoreMap, saved.scores || {});
-        restored = true;
-      }
-    } catch { /* nothing to recover */ }
 
     setServerUpdatedAt(sc.updatedAt ?? null);
-    // The baseline is what the server holds, not what was restored from the
-    // tab's cache — restored values are unsaved by definition and must be sent.
-    const serverMap: Record<string, { score: number | null; comment: string }> = {};
-    sc.criterionScores?.forEach((cs: any) => {
-      serverMap[cs.criterionId] = { score: cs.score, comment: cs.comment || '' };
-    });
-    setSavedScores(serverMap);
+    // The baseline for change detection is exactly what was loaded.
+    setSavedScores({ ...scoreMap });
 
-    setEngaged(restored);
-    setRecovered(restored);
+    // A scorecard with anything already scored is engaged: the judge has been
+    // here before, so marking what is still missing is fair from the start.
+    setEngaged(Object.values(scoreMap).some(v => v.score !== null && v.score !== undefined));
     setDirty(false);
     setLastSaved(null);
     setScores(scoreMap);
@@ -116,20 +158,6 @@ export default function JudgePortalPage() {
     setRecommendation(sc.recommendation || '');
     setMessage('');
   };
-
-  /** Where unsaved work is mirrored, per scorecard. */
-  const draftKey = (id: string) => `hackjudge-draft-${id}`;
-
-  // Mirror every change locally before the network is involved. If the tab is
-  // reclaimed between autosaves this is what survives.
-  useEffect(() => {
-    if (!activeScorecard || !dirty) return;
-    try {
-      sessionStorage.setItem(draftKey(activeScorecard.id), JSON.stringify({
-        scores, strengths, improvements, recommendation, at: Date.now(),
-      }));
-    } catch { /* private browsing, quota — the autosave still covers it */ }
-  }, [scores, strengths, improvements, recommendation, dirty, activeScorecard]);
 
   // Autosave twenty seconds after the last change. Long enough not to fight the
   // judge mid-sentence, short enough that little is at stake.
@@ -212,7 +240,10 @@ export default function JudgePortalPage() {
 
     for (const cs of rows) {
       const s = scores[cs.criterionId] || { score: null, comment: '' };
-      if (s.score === null || s.score === undefined) {
+      const outOfRange =
+        s.score !== null && s.score !== undefined &&
+        (s.score < 0 || s.score > cs.maxScore);
+      if (s.score === null || s.score === undefined || outOfRange) {
         missingScores.push(cs.criterionName || cs.name || 'a criterion');
       } else if (cs.requiresComment && !(s.comment || '').trim()) {
         missingComments.push(cs.criterionName || cs.name || 'a criterion');
@@ -350,7 +381,6 @@ export default function JudgePortalPage() {
             'this page is behind the current rubric. Reload before continuing.',
           );
         }
-        try { sessionStorage.removeItem(draftKey(activeScorecard.id)); } catch {}
         setMessage(submit ? 'Scorecard submitted!' : auto ? '' : 'Draft saved');
         if (submit) {
           setActiveScorecard(null);
@@ -474,13 +504,6 @@ export default function JudgePortalPage() {
         {/* Scoring form overlay */}
         {activeScorecard && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f4f6fa] p-4 sm:static sm:z-auto sm:overflow-visible sm:mb-6 sm:rounded-xl sm:border sm:border-slate-300 sm:bg-white sm:p-6">
-            {recovered && (
-              <div className="mb-3 rounded-xl border-2 border-amber-400 bg-amber-50 px-4 py-3">
-                <p className="text-base text-amber-900">
-                  Unsaved work from this device was restored. Check it, then save.
-                </p>
-              </div>
-            )}
             <div className="flex items-start justify-between mb-4 gap-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Score: {activeScorecard.teamName}</h2>
@@ -516,7 +539,7 @@ export default function JudgePortalPage() {
             </div>
 
             {message && (
-              <div className={`mb-4 px-4 py-2 rounded-lg text-base ${message.includes('Error') || message.includes('required') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-emerald-700'}`}>
+              <div className={`mb-4 px-4 py-2 rounded-lg text-base ${MESSAGE_TONE[toneOf(message)]}`}>
                 {message}
               </div>
             )}
@@ -585,7 +608,7 @@ export default function JudgePortalPage() {
                         onChange={(e) => { setDirty(true); setEngaged(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: parseInt(e.target.value) } })); }}
                         className="flex-1 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-[#7c3aed] disabled:opacity-50" />
                       <input type="number" min="0" max={cs.maxScore} value={s.score ?? ''} disabled={isLocked}
-                        onChange={(e) => { setDirty(true); setEngaged(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.min(parseInt(e.target.value) || 0, cs.maxScore) } })); }}
+                        onChange={(e) => { setDirty(true); setEngaged(true); setScores(prev => ({ ...prev, [cs.criterionId]: { ...prev[cs.criterionId], score: e.target.value === '' ? null : Math.max(0, Math.min(parseInt(e.target.value) || 0, cs.maxScore)) } })); }}
                         className={`w-16 bg-[#f4f6fa] border rounded-lg px-3 py-1.5 text-center text-base font-mono text-slate-900 outline-none disabled:opacity-50 ${
                           scoreMissing ? 'border-2 border-red-500 bg-red-50' : 'border-slate-300'
                         }`} />

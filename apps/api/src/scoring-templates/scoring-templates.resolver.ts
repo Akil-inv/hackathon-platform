@@ -49,12 +49,31 @@ export class ScoringTemplatesResolver {
     return this.service.lockState(eventId);
   }
 
+  // Replacing an event's whole rubric is the most destructive edit on this
+  // resolver and was the only mutation with no role guard at all.
+  @Roles('ADMIN')
   @Mutation(() => LoadRubricResult)
   async loadStandardRubric(
     @Args('eventId') eventId: string,
     @CurrentUser() user: any,
   ) {
     return this.service.loadStandardRubric(eventId, user.sub);
+  }
+
+  /**
+   * Marks the rubric finished so judges can score against it.
+   *
+   * ADMIN only, matching every other structural change on this resolver — a
+   * coordinator cannot edit criteria, so they should not be able to declare
+   * them done either.
+   */
+  @Roles('ADMIN')
+  @Mutation(() => ScoringTemplateEntity)
+  async activateScoringTemplate(
+    @Args('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.activate(id, user.sub);
   }
 
   @Roles('ADMIN')

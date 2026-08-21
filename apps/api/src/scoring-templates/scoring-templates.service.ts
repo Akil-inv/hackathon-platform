@@ -236,6 +236,89 @@ export class ScoringTemplatesService {
     return { templateId: template.id, categoriesCreated, rowsCreated };
   }
 
+  /**
+   * Marks a rubric finished, so judges can score against it.
+   *
+   * Templates are created DRAFT and nothing used to move them on. Scoring and
+   * ranking both refuse a draft — correctly, since a rubric mid-edit is not
+   * something a score should be measured against — but with no control to
+   * clear it a coordinator reached a state they could not leave: a rubric that
+   * balanced perfectly, a green tick on the page, and judges told the template
+   * was still a draft.
+   *
+   * The only condition is arithmetic. Where the criteria came from — the
+   * standard rubric or typed in by hand — is not this method's business.
+   */
+  async activate(templateId: string, userId: string) {
+    const template = await this.prisma.scoringTemplate.findUnique({
+      where: { id: templateId },
+      include: { criteria: true },
+    });
+    if (!template) throw new NotFoundException('Scoring template not found');
+
+    if (template.status === 'ACTIVE') return this.findOne(templateId);
+    if (template.status === 'LOCKED') {
+      throw new BadRequestException(
+        'This rubric is locked. Scores have already been submitted against it.',
+      );
+    }
+
+    const categories = template.criteria.filter((c) => !(c as any).parentId);
+    if (categories.length === 0) {
+      throw new BadRequestException(
+        'Add at least one category before marking the rubric done.',
+      );
+    }
+
+    const total = categories.reduce((sum, c) => sum + c.maxScore, 0);
+    if (total !== template.maxTotal) {
+      throw new BadRequestException(
+        `Categories total ${total}, not ${template.maxTotal}. A rubric that ` +
+          'does not add up cannot be scored against.',
+      );
+    }
+
+    // Every category's rows must fill it exactly. A category of 40 holding
+    // rows worth 30 means ten points nobody can award.
+    for (const cat of categories) {
+      const rows = template.criteria.filter((c) => (c as any).parentId === cat.id);
+      if (rows.length === 0) {
+        throw new BadRequestException(
+          `"${cat.name}" has no rows. Every category needs something to score.`,
+        );
+      }
+      const used = rows.reduce((sum, r) => sum + r.maxScore, 0);
+      if (used !== cat.maxScore) {
+        throw new BadRequestException(
+          `"${cat.name}" allows ${cat.maxScore} points but its rows total ${used}.`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.scoringTemplate.update({
+      where: { id: templateId },
+      data: { status: 'ACTIVE' },
+      include: { criteria: { orderBy: { displayOrder: 'asc' } } },
+    });
+
+    await this.audit.log({
+      userId,
+      eventId: template.eventId,
+      action: AuditAction.UPDATE,
+      entityType: 'ScoringTemplate',
+      entityId: templateId,
+      oldValues: { status: template.status },
+      newValues: {
+        status: 'ACTIVE',
+        maxTotal: template.maxTotal,
+        categories: categories.length,
+        rows: template.criteria.length - categories.length,
+      },
+    });
+
+    return this.enrichTemplate(updated);
+  }
+
   async create(input: CreateScoringTemplateInput, userId: string) {
     const template = await this.prisma.scoringTemplate.create({
       data: input,

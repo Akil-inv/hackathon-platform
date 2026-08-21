@@ -26,6 +26,7 @@ const ADD_CRITERION = `mutation AC($input: AddCriterionInput!) { addCriterion(in
 const UPDATE_CRITERION = `mutation UC($id: String!, $input: UpdateCriterionInput!) { updateCriterion(id: $id, input: $input) { id name maxScore } }`;
 const LOAD_RUBRIC = `mutation LR($eventId: String!) { loadStandardRubric(eventId: $eventId) { categoriesCreated rowsCreated } }`;
 const DELETE_CRITERION = `mutation DC($id: String!) { removeCriterion(id: $id) }`;
+const ACTIVATE_TEMPLATE = `mutation AT($id: String!) { activateScoringTemplate(id: $id) { id status } }`;
 
 // Falls back to Singapore, not UTC. The schema default of 'UTC' was never a
 // considered choice — an event that genuinely runs on UTC will say so.
@@ -500,6 +501,18 @@ export default function EventSetupPage() {
           <CriteriaBuilder
             criteria={criteria}
             maxTotal={100}
+            status={template?.status}
+            onActivate={async () => {
+              if (!template?.id) {
+                show('Add the criteria first.', 'err');
+                return;
+              }
+              const res = await run(ACTIVATE_TEMPLATE, { id: template.id });
+              if (res) {
+                show('Rubric marked done — judges can now score against it.');
+                reload();
+              }
+            }}
             onLoadRubric={async () => {
               const res = await run(LOAD_RUBRIC, { eventId });
               if (res) {

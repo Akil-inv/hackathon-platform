@@ -48,6 +48,19 @@ export const SCORING_TEMPLATES_QUERY = `
   }
 `;
 
+/**
+ * Marks a rubric finished so judges can score against it.
+ *
+ * Templates are created DRAFT, and scoring refuses a draft. Nothing used to
+ * move one on, so a coordinator could finish a rubric that balanced perfectly
+ * and still find judges unable to score, with no control anywhere to fix it.
+ */
+export const ACTIVATE_SCORING_TEMPLATE = `
+  mutation ActivateScoringTemplate($id: String!) {
+    activateScoringTemplate(id: $id) { id status }
+  }
+`;
+
 export const AUDIT_LOGS_QUERY = `
   query AuditLogs($eventId: String!, $take: Float, $skip: Float) {
     auditLogsByEvent(eventId: $eventId, take: $take, skip: $skip) {

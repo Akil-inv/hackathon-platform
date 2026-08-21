@@ -47,6 +47,18 @@ type Props = {
   ) => Promise<void> | void;
   onUpdate: (id: string, changes: Partial<Criterion>) => Promise<void> | void;
   onRemove: (id: string, name: string) => Promise<void> | void;
+  /**
+   * The template's own status, which is not the same thing as the criteria
+   * being complete.
+   *
+   * A rubric can total 100, balance perfectly, and still be a DRAFT — and
+   * judges cannot score against a draft. Nothing on this page used to say so,
+   * so a coordinator would finish the rubric, see a green tick, and learn from
+   * a judge that scoring was refused.
+   */
+  status?: 'DRAFT' | 'ACTIVE' | 'LOCKED';
+  /** Marks the rubric finished so judges can score against it. */
+  onActivate?: () => Promise<void> | void;
 };
 
 const AMBER = '#f59e0b';
@@ -64,6 +76,8 @@ export default function CriteriaBuilder({
   onAddRow,
   onUpdate,
   onRemove,
+  status,
+  onActivate,
 }: Props) {
   const tree = useMemo(() => {
     const categories = criteria
@@ -429,6 +443,52 @@ export default function CriteriaBuilder({
       {balanced && (
         <div style={{ fontSize: 12, color: GREEN, marginBottom: 8 }}>
           Every category balances and the total is {maxTotal}.
+        </div>
+      )}
+
+      {/*
+        Whether judges can actually use this rubric.
+        Shown whenever a status is known, balanced or not: a coordinator who
+        has not finished should still be able to see what finishing means, and
+        one who has should not have to guess why nothing is happening.
+      */}
+      {status && onActivate && status === 'DRAFT' && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 8,
+            background: balanced ? 'rgba(16,185,129,0.08)' : 'rgba(148,163,184,0.10)',
+            border: `1px solid ${balanced ? 'rgba(16,185,129,0.25)' : 'rgba(148,163,184,0.25)'}`,
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontSize: 13, color: balanced ? GREEN : MUTED }}>
+            {balanced
+              ? 'Judges cannot score yet. Mark the rubric done to open scoring.'
+              : `Judges cannot score until the rubric totals ${maxTotal} and every category balances.`}
+          </span>
+          <button
+            type="button"
+            className="btn btn-pri btn-sm"
+            disabled={!balanced || busy}
+            title={balanced ? undefined : 'The rubric does not balance yet'}
+            onClick={() => onActivate()}
+          >
+            Mark rubric done
+          </button>
+        </div>
+      )}
+
+      {status === 'ACTIVE' && (
+        <div style={{ fontSize: 12, color: GREEN, marginBottom: 8 }}>
+          Rubric is live — judges can score against it. Wording can still be
+          corrected; scores and structure cannot once judging has begun.
+        </div>
+      )}
+
+      {status === 'LOCKED' && (
+        <div style={{ fontSize: 12, color: MUTED, marginBottom: 8 }}>
+          Rubric is locked. Scores have been submitted against it.
         </div>
       )}
 
