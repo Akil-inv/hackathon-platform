@@ -143,6 +143,25 @@ export default function DriftMetronome({ scorecards, sessions, size = 84 }: Prop
       pinned,
       count: rows.length,
       label: phrasing(drift, pinned),
+      // The scores themselves, in the order the teams were seen.
+      //
+      // Without them a judge has a lean and no way to check it. Four identical
+      // scores and one excellent team pins the arm — nothing drifted, but the
+      // regression weights the last point heavily and the sentence alone
+      // cannot say so. Shown, the 90 explains the lean in the same glance.
+      // The two ends, not the whole day.
+      //
+      // Without any scores a judge has a lean and no way to check it: four
+      // identical scores and one excellent team pins the arm, and the sentence
+      // alone cannot say that nothing drifted. With all of them, twenty-seven
+      // numbers wrap a 240px tooltip into a paragraph nobody reads.
+      //
+      // The ends are where a least-squares line is pulled hardest, so these
+      // are the scores that moved the arm — and an outlier is still visible,
+      // which is the point. Deliberately labelled "started" and "latest"
+      // rather than "first three against last three": the fit uses every
+      // point, and the tooltip should not claim otherwise.
+      all: rows.map((r) => r.score),
     };
   }, [scorecards, sessions]);
 
@@ -208,7 +227,10 @@ export default function DriftMetronome({ scorecards, sessions, size = 84 }: Prop
         >
           {state.label}
           <span className="mt-1 block text-[11px] text-gray-500">
-            Across {state.count} scored sessions today.
+            {state.count < 6
+              ? `All ${state.count} today: ${state.all.join(', ')}.`
+              : `Started ${state.all.slice(0, 3).join(', ')} · latest ` +
+                `${state.all.slice(-3).join(', ')} · ${state.count} scored today.`}
           </span>
         </div>
       )}
