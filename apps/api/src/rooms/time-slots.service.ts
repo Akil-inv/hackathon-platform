@@ -40,15 +40,29 @@ export class TimeSlotsService {
   }
 
   async generate(input: GenerateTimeSlotsInput, userId: string) {
-    const { eventId, date, operatingStart, operatingEnd, sessionDurationMinutes, breakDurationMinutes, lunchStart, lunchEnd } = input;
+    const { eventId, date, operatingStart, operatingEnd, breakDurationMinutes, lunchStart, lunchEnd } = input;
 
     // Room availability is deliberately not touched here. It is a property of a
     // room and a date, edited on its own, and regenerating a day should not
     // silently discard it.
 
-    // Fetch event timezone
-    const event = await this.prisma.event.findUnique({ where: { id: eventId }, select: { timezone: true } });
-    const timezone = event?.timezone || 'Asia/Singapore';
+    // Fetch event timezone and session duration. Session duration is owned by
+    // the event and is the single source of truth: slots are always cut to the
+    // event's configured length, never to a value re-typed on the generation
+    // form. input.sessionDurationMinutes is accepted for backward compatibility
+    // but deliberately ignored — that duplicate input is what let the two drift.
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { timezone: true, sessionDurationMinutes: true },
+    });
+    if (!event) throw new BadRequestException('Event not found');
+    const timezone = event.timezone || 'Asia/Singapore';
+    const sessionDurationMinutes = event.sessionDurationMinutes;
+    if (!sessionDurationMinutes || sessionDurationMinutes <= 0) {
+      throw new BadRequestException(
+        'Event has no valid session duration; set it in event setup before generating slots',
+      );
+    }
 
     // Get the date string in YYYY-MM-DD format
     const dateStr = new Date(date).toLocaleDateString('en-CA', { timeZone: 'UTC' });

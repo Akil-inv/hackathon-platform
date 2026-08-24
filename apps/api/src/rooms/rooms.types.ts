@@ -80,7 +80,15 @@ export class GenerateTimeSlotsInput {
   unavailableRooms?: RoomHalfDayInput[];
   @Field() operatingStart!: string;
   @Field() operatingEnd!: string;
-  @Field(() => Int) sessionDurationMinutes!: number;
+  /// @deprecated Ignored. Session duration is derived from the event
+  /// (event.sessionDurationMinutes) so slot length and the schedule can never
+  /// disagree with event setup. Retained as optional only so existing clients
+  /// that still send it do not fail validation.
+  @Field(() => Int, {
+    nullable: true,
+    deprecationReason: 'Derived from event.sessionDurationMinutes; value is ignored.',
+  })
+  sessionDurationMinutes?: number;
   @Field(() => Int) breakDurationMinutes!: number;
   @Field({ nullable: true }) lunchStart?: string;
   @Field({ nullable: true }) lunchEnd?: string;
