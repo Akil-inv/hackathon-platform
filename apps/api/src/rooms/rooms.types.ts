@@ -89,7 +89,14 @@ export class GenerateTimeSlotsInput {
     deprecationReason: 'Derived from event.sessionDurationMinutes; value is ignored.',
   })
   sessionDurationMinutes?: number;
-  @Field(() => Int) breakDurationMinutes!: number;
+  /// @deprecated Ignored. Sessions run back-to-back with no break so slot
+  /// length reflects the event's session duration exactly. Retained as optional
+  /// only so existing clients that still send it do not fail validation.
+  @Field(() => Int, {
+    nullable: true,
+    deprecationReason: 'Ignored; sessions are generated back-to-back with no break.',
+  })
+  breakDurationMinutes?: number;
   @Field({ nullable: true }) lunchStart?: string;
   @Field({ nullable: true }) lunchEnd?: string;
 }

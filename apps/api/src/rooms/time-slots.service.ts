@@ -40,7 +40,7 @@ export class TimeSlotsService {
   }
 
   async generate(input: GenerateTimeSlotsInput, userId: string) {
-    const { eventId, date, operatingStart, operatingEnd, breakDurationMinutes, lunchStart, lunchEnd } = input;
+    const { eventId, date, operatingStart, operatingEnd, lunchStart, lunchEnd } = input;
 
     // Room availability is deliberately not touched here. It is a property of a
     // room and a date, edited on its own, and regenerating a day should not
@@ -63,6 +63,12 @@ export class TimeSlotsService {
         'Event has no valid session duration; set it in event setup before generating slots',
       );
     }
+
+    // No break between sessions. Slots run back-to-back so the grid reflects the
+    // event's session duration exactly, and the organizer controls timing solely
+    // through that one value. input.breakDurationMinutes is accepted for backward
+    // compatibility but deliberately ignored.
+    const breakDurationMinutes = 0;
 
     // Get the date string in YYYY-MM-DD format
     const dateStr = new Date(date).toLocaleDateString('en-CA', { timeZone: 'UTC' });

@@ -255,14 +255,14 @@ input GenerateScheduleInput {
 }
 
 input GenerateTimeSlotsInput {
-  breakDurationMinutes: Int!
+  breakDurationMinutes: Int
   date: DateTime!
   eventId: String!
   lunchEnd: String
   lunchStart: String
   operatingEnd: String!
   operatingStart: String!
-  sessionDurationMinutes: Int!
+  sessionDurationMinutes: Int
   unavailableRooms: [RoomHalfDayInput!]
 }
 
