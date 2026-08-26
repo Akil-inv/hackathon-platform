@@ -126,7 +126,7 @@ export const SCORECARDS_BY_JUDGE_QUERY = `
   query ScorecardsJudge($judgeId: String!, $eventId: String!) {
     scorecardsByJudge(judgeId: $judgeId, eventId: $eventId) {
       id sessionId judgeId judgeName teamId teamName projectName status totalScore submittedAt
-      criterionScores { id criterionId criterionName maxScore guidanceText requiresComment score comment }
+      criterionScores { id criterionId criterionName maxScore guidanceText requiresComment displayOrder score comment }
     }
   }
 `;
@@ -136,7 +136,7 @@ export const SCORECARD_DETAIL_QUERY = `
     scorecard(id: $id) {
       id sessionId judgeId judgeName teamId teamName projectName status totalScore
       overallStrengths areasForImprovement recommendation conflictConfirmed submittedAt reopenReason
-      criterionScores { id criterionId criterionName maxScore guidanceText requiresComment score comment }
+      criterionScores { id criterionId criterionName maxScore guidanceText requiresComment displayOrder score comment }
     }
   }
 `;

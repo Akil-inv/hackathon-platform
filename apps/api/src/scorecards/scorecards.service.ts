@@ -45,6 +45,9 @@ export class ScorecardsService {
         maxScore: cs.criterion?.maxScore || 0,
         guidanceText: cs.criterion?.guidanceText || null,
         requiresComment: cs.criterion?.requiresComment || false,
+        // Carries the setup-page ordering through to the judge portal so the
+        // scoring rows render in the same order they were arranged in setup.
+        displayOrder: cs.criterion?.displayOrder ?? 0,
         // Lets the judge portal group rows under their category and show a
         // running subtotal per section.
         parentId: cs.criterion?.parentId || null,

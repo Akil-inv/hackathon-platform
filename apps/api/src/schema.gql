@@ -179,6 +179,7 @@ type CriterionScoreEntity {
   comment: String
   criterionId: String!
   criterionName: String!
+  displayOrder: Int
   guidanceText: String
   id: String!
   maxScore: Int!

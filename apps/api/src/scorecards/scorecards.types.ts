@@ -11,6 +11,7 @@ export class CriterionScoreEntity {
   @Field(() => Int) maxScore!: number;
   @Field({ nullable: true }) guidanceText?: string;
   @Field() requiresComment!: boolean;
+  @Field(() => Int, { nullable: true }) displayOrder?: number;
   @Field(() => Int, { nullable: true }) score?: number;
   @Field({ nullable: true }) comment?: string;
 }

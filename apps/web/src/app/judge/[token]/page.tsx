@@ -231,9 +231,9 @@ export default function JudgePortalPage() {
   const outstanding = useMemo(() => {
     if (!activeScorecard) return { missingScores: [], missingComments: [] };
 
-    const rows = (activeScorecard.criterionScores || []).filter(
-      (cs: any) => !!cs.parentId,
-    );
+    const rows = (activeScorecard.criterionScores || [])
+      .filter((cs: any) => !!cs.parentId)
+      .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
     const missingScores: string[] = [];
     const missingComments: string[] = [];
@@ -575,9 +575,9 @@ export default function JudgePortalPage() {
                 // themselves. Filtering them here means a scorecard created
                 // before the rubric became two-level cannot show one as
                 // scoreable.
-                const rows = (activeScorecard.criterionScores || []).filter(
-                  (cs: any) => !!cs.parentId,
-                );
+                const rows = (activeScorecard.criterionScores || [])
+                  .filter((cs: any) => !!cs.parentId)
+                  .sort((a: any, b: any) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 
                 // Running subtotal per category, so a judge can see how much
                 // of each section is used without adding it up themselves.
