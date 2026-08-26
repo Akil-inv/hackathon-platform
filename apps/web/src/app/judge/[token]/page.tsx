@@ -625,7 +625,17 @@ export default function JudgePortalPage() {
                       </div>
                       <span className="text-sm text-slate-600">Max: {cs.maxScore}</span>
                     </div>
-                    {cs.guidanceText && <p className="text-sm text-slate-600 mb-3">{cs.guidanceText}</p>}
+                    {cs.guidanceText && cs.guidanceText.trim() && (
+                      <div className="text-sm text-slate-600 mb-3">
+                        {cs.guidanceText
+                          .split(/[;\n]+/)
+                          .map((line) => line.trim())
+                          .filter(Boolean)
+                          .map((line, i) => (
+                            <div key={i}>{line}</div>
+                          ))}
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-4 mb-2">
                       <input type="range" min="0" max={cs.maxScore} step="1" value={s.score ?? 0} disabled={isLocked}

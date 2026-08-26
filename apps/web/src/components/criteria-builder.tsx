@@ -20,6 +20,20 @@ import { useMemo, useState } from 'react';
  * render as categories with no rows — accurate, if a little odd.
  */
 
+/**
+ * Split scoring guidance into display lines. Organizers may separate points
+ * either with newlines or with ';' — both are treated as line breaks so a
+ * banding like "<200K score <5; 200-400K score 5-8" shows one band per line.
+ * Rendered as plain text by the caller, so '<' and '>' are safe.
+ */
+export function guidanceLines(text?: string | null): string[] {
+  if (!text) return [];
+  return text
+    .split(/[;\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export type Criterion = {
   id: string;
   name: string;
@@ -290,9 +304,11 @@ export default function CriteriaBuilder({
                             </span>
                           )}
                         </div>
-                        {r.guidanceText && (
+                        {guidanceLines(r.guidanceText).length > 0 && (
                           <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                            {r.guidanceText}
+                            {guidanceLines(r.guidanceText).map((line, i) => (
+                              <div key={i}>{line}</div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -371,12 +387,13 @@ export default function CriteriaBuilder({
                     Comment req.
                   </label>
                 </div>
-                <input
+                <textarea
                   className="inp"
-                  placeholder="Scoring guidance, e.g. 10 if fully satisfies · 5 if partially"
+                  placeholder="Scoring guidance — one point per line, or separate with ';'  e.g.  <200K score <5;  200-400K score 5-8;  >400K score >8"
                   value={newRow.guidance}
                   onChange={(e) => setNewRow({ ...newRow, guidance: e.target.value })}
-                  style={{ marginTop: 6 }}
+                  rows={3}
+                  style={{ marginTop: 6, resize: 'vertical', fontFamily: 'inherit' }}
                 />
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <button type="button"
